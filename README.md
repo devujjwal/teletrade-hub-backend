@@ -114,7 +114,7 @@ chmod -R 775 storage/logs
 
 ## Vendor Integration (TRIEL)
 
-The platform integrates with TRIEL B2B API:
+The platform integrates with TRIEL B2B API (https://restful.triel.sk):
 
 - **Stock Sync:** Periodic synchronization of product catalog
 - **Reservations:** Reserve articles during checkout
