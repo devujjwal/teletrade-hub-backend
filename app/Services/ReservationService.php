@@ -75,12 +75,24 @@ class ReservationService
         ]);
 
         try {
+            // Get product warehouse from vendor_article_id (format: sku_warehouse)
+            // TRIEL SKUs often include warehouse code at the end (e.g., 1028-131512-21420_BR001)
+            $warehouse = 'BR001'; // Default warehouse, extract from SKU if available
+            if (strpos($vendorArticleId, '_') !== false) {
+                $parts = explode('_', $vendorArticleId);
+                $warehouse = end($parts);
+            }
+            
             // Call vendor API to reserve
-            $vendorResponse = $this->vendorApi->reserveArticle($vendorArticleId, $quantity);
+            $vendorResponse = $this->vendorApi->reserveArticle($vendorArticleId, $warehouse, $quantity);
 
-            if (isset($vendorResponse['success']) && $vendorResponse['success']) {
-                // Update reservation with vendor ID
-                $vendorReservationId = $vendorResponse['reservationId'] ?? $vendorResponse['id'];
+            // TRIEL returns array with 'status' and 'ReturnVal' or 'error' and 'error_msg'
+            $isSuccess = (isset($vendorResponse['status']) && $vendorResponse['status'] === 'ok') ||
+                        (isset($vendorResponse['error']) && $vendorResponse['error'] === 0);
+            
+            if ($isSuccess) {
+                // Update reservation with vendor ID (TRIEL returns 'ReturnVal' with reservation ID)
+                $vendorReservationId = $vendorResponse['ReturnVal'] ?? $vendorResponse['reservationId'] ?? $vendorResponse['id'];
                 $this->reservationModel->updateVendorReservation($reservationId, $vendorReservationId);
 
                 // Update local stock
