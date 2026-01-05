@@ -307,7 +307,8 @@ class ProductSyncService
      */
     private function disableUnavailableProducts($vendorProducts)
     {
-        $vendorIds = array_column($vendorProducts, 'id');
+        // TRIEL uses 'sku' as the unique identifier
+        $vendorIds = array_column($vendorProducts, 'sku');
         
         if (empty($vendorIds)) {
             return 0;
