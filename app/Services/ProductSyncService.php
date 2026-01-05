@@ -41,11 +41,12 @@ class ProductSyncService
             // Get stock data from vendor
             $stockData = $this->vendorApi->getStock($lang);
 
-            if (empty($stockData) || !isset($stockData['products'])) {
+            if (empty($stockData) || !isset($stockData['stock'])) {
                 throw new Exception('Invalid stock data received from vendor');
             }
 
-            $products = $stockData['products'];
+            // TRIEL returns data in 'stock' array, not 'products'
+            $products = $stockData['stock'];
             $stats = [
                 'synced' => 0,
                 'added' => 0,
@@ -106,27 +107,24 @@ class ProductSyncService
     }
 
     /**
-     * Normalize vendor product data
+     * Normalize vendor product data (TRIEL format)
      */
     private function normalizeVendorProduct($vendorProduct)
     {
-        // Get or create category
-        $categoryId = null;
-        if (!empty($vendorProduct['category'])) {
-            $categoryId = $this->getOrCreateCategory($vendorProduct['category']);
-        }
-
-        // Get or create brand
+        // TRIEL returns: name (brand), model (product), sku, price, in_stock, color, properties{}
+        $properties = $vendorProduct['properties'] ?? [];
+        
+        // Get or create brand (TRIEL 'name' field is the brand)
         $brandId = null;
-        if (!empty($vendorProduct['brand'])) {
-            $brandId = $this->getOrCreateBrand($vendorProduct['brand']);
+        if (!empty($vendorProduct['name'])) {
+            $brandId = $this->getOrCreateBrand($vendorProduct['name']);
         }
 
-        // Get or create warranty
+        // Category - can be derived from properties or set later
+        $categoryId = null;
+
+        // Warranty - can be derived from properties or set default
         $warrantyId = null;
-        if (!empty($vendorProduct['warranty'])) {
-            $warrantyId = $this->getOrCreateWarranty($vendorProduct['warranty']);
-        }
 
         // Base price from vendor
         $basePrice = floatval($vendorProduct['price'] ?? 0);
@@ -134,39 +132,47 @@ class ProductSyncService
         // Calculate customer price with markup
         $customerPrice = $this->pricingService->calculatePrice($basePrice, $categoryId, $brandId);
 
+        // Product name is the 'model' field, or use full_name from properties
+        $productName = $properties['full_name'] ?? ($vendorProduct['model'] ?? 'Unnamed Product');
+        
         // Generate slug
-        $slug = $this->generateSlug($vendorProduct['name'] ?? $vendorProduct['id']);
+        $slug = $this->generateSlug($productName);
 
         // Stock quantity
-        $stockQuantity = intval($vendorProduct['stock'] ?? 0);
+        $stockQuantity = intval($vendorProduct['in_stock'] ?? 0);
+        
+        // Extract specs from properties
+        $storage = $properties['prod_storage'] ?? null;
+        $ram = $properties['prod_memory'] ?? null;
+        $ean = $properties['ean'] ?? null;
 
         return [
-            ':vendor_article_id' => $vendorProduct['id'],
-            ':sku' => $vendorProduct['sku'] ?? $vendorProduct['id'],
-            ':ean' => $vendorProduct['ean'] ?? null,
-            ':name' => $vendorProduct['name'] ?? 'Unnamed Product',
-            ':name_de' => $vendorProduct['name_de'] ?? null,
-            ':name_en' => $vendorProduct['name_en'] ?? null,
-            ':name_sk' => $vendorProduct['name_sk'] ?? null,
-            ':description' => $vendorProduct['description'] ?? null,
-            ':description_de' => $vendorProduct['description_de'] ?? null,
-            ':description_en' => $vendorProduct['description_en'] ?? null,
-            ':description_sk' => $vendorProduct['description_sk'] ?? null,
+            ':vendor_article_id' => $vendorProduct['sku'], // TRIEL uses 'sku' as unique ID
+            ':sku' => $vendorProduct['sku'],
+            ':ean' => $ean,
+            ':name' => $productName,
+            ':name_de' => null,
+            ':name_en' => $productName,
+            ':name_sk' => null,
+            ':description' => null,
+            ':description_de' => null,
+            ':description_en' => null,
+            ':description_sk' => null,
             ':category_id' => $categoryId,
             ':brand_id' => $brandId,
             ':warranty_id' => $warrantyId,
             ':base_price' => $basePrice,
             ':price' => $customerPrice,
-            ':currency' => $vendorProduct['currency'] ?? 'EUR',
+            ':currency' => 'EUR',
             ':stock_quantity' => $stockQuantity,
             ':available_quantity' => $stockQuantity,
             ':is_available' => $stockQuantity > 0 ? 1 : 0,
-            ':weight' => $vendorProduct['weight'] ?? null,
-            ':dimensions' => $vendorProduct['dimensions'] ?? null,
+            ':weight' => null,
+            ':dimensions' => null,
             ':color' => $vendorProduct['color'] ?? null,
-            ':storage' => $vendorProduct['storage'] ?? null,
-            ':ram' => $vendorProduct['ram'] ?? null,
-            ':specifications' => !empty($vendorProduct['specifications']) ? json_encode($vendorProduct['specifications']) : null,
+            ':storage' => $storage,
+            ':ram' => $ram,
+            ':specifications' => !empty($properties) ? json_encode($properties) : null,
             ':slug' => $slug,
             ':last_synced_at' => date('Y-m-d H:i:s')
         ];
