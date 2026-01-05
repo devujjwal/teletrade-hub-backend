@@ -1,5 +1,10 @@
 # TeleTrade Hub API - Apache Configuration
 
+# Disable ModSecurity for API endpoints
+<IfModule mod_security.c>
+    SecRuleEngine Off
+</IfModule>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     
@@ -32,4 +37,3 @@ Options -Indexes
     php_flag log_errors On
     php_value error_log /home/vsmjr110/public_html/api/storage/logs/php_errors.log
 </IfModule>
-
