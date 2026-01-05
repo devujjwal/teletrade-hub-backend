@@ -153,6 +153,8 @@ class VendorApiService
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);  // TRIEL uses --location flag
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 10);
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
