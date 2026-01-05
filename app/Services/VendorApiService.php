@@ -43,17 +43,23 @@ class VendorApiService
     /**
      * Reserve article
      */
-    public function reserveArticle($articleId, $quantity)
+    public function reserveArticle($sku, $warehouse, $quantity)
     {
         $startTime = microtime(true);
         
+        // TRIEL RESTful API might use different parameter names
+        // Try multiple formats to be compatible
         $payload = [
-            'articleId' => $articleId,
-            'quantity' => $quantity
+            'sku' => $sku,
+            'warehouse' => $warehouse,
+            'quantity' => $quantity,
+            // Also include old API format just in case
+            'gensoft_id' => $sku,
+            'amount' => $quantity
         ];
 
         try {
-            $response = $this->makeRequest('POST', '/ReserveArticle', $payload);
+            $response = $this->makeRequest('POST', '/reserveArticle/', $payload);
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('ReserveArticle', 'POST', $payload, $response, 200, $duration);
@@ -74,11 +80,11 @@ class VendorApiService
         $startTime = microtime(true);
         
         $payload = [
-            'reservationId' => $reservationId
+            'reservation_id' => $reservationId  // Old API uses reservation_id
         ];
 
         try {
-            $response = $this->makeRequest('POST', '/UnreserveArticle', $payload);
+            $response = $this->makeRequest('POST', '/removeReservedArticle/', $payload);
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('UnreserveArticle', 'POST', $payload, $response, 200, $duration);
@@ -94,12 +100,19 @@ class VendorApiService
     /**
      * Create sales order
      */
-    public function createSalesOrder($orderData)
+    public function createSalesOrder($reservations, $payWith = 'Wire', $insurance = 'no')
     {
         $startTime = microtime(true);
+        
+        // TRIEL format: reservations array, payWith, insurance
+        $orderData = [
+            'reservations' => json_encode($reservations),  // JSON encoded array of reservation IDs
+            'payWith' => $payWith,        // 'Wire' or 'OnDelivery'
+            'insurance' => $insurance     // 'yes' or 'no'
+        ];
 
         try {
-            $response = $this->makeRequest('POST', '/CreateSalesOrder', $orderData);
+            $response = $this->makeRequest('POST', '/createSalesOrder/', $orderData);
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('CreateSalesOrder', 'POST', $orderData, $response, 200, $duration);
@@ -159,7 +172,12 @@ class VendorApiService
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
             if ($data !== null) {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+                // TRIEL API uses form-encoded data for POST (not JSON)
+                $postFields = http_build_query($data);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
+                // Update content type for form data
+                $headers[1] = 'Content-Type: application/x-www-form-urlencoded';
+                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             }
         } elseif ($method === 'GET' && $data !== null) {
             $url .= '?' . http_build_query($data);
@@ -177,11 +195,24 @@ class VendorApiService
 
         if ($httpCode >= 400) {
             $errorData = json_decode($response, true);
-            $errorMsg = $errorData['message'] ?? 'Unknown error';
+            $errorMsg = $errorData['message'] ?? $errorData['error_msg'] ?? 'Unknown error';
             throw new Exception("Vendor API Error (HTTP $httpCode): $errorMsg");
         }
 
-        return json_decode($response, true);
+        // Try JSON decode first (RESTful API)
+        $decoded = json_decode($response, true);
+        if ($decoded !== null) {
+            return $decoded;
+        }
+        
+        // Fallback: Try unserialize for old API format
+        $unserialized = @unserialize($response);
+        if ($unserialized !== false) {
+            return $unserialized;
+        }
+        
+        // Return raw response if neither works
+        return ['raw' => $response];
     }
 
     /**
