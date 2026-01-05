@@ -25,7 +25,9 @@ class VendorApiService
         $startTime = microtime(true);
         
         try {
-            $response = $this->makeRequest('GET', '/GetStock', ['lang' => $lang]);
+            // TRIEL uses lang_id: 0=EN, 1=SK, 2=DE
+            $langId = $lang === 'sk' ? 1 : ($lang === 'de' ? 2 : 0);
+            $response = $this->makeRequest('GET', '/getStock/', ['lang_id' => $langId, 'price_drop' => 0]);
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('GetStock', 'GET', ['lang' => $lang], $response, 200, $duration);
@@ -141,7 +143,7 @@ class VendorApiService
         $ch = curl_init();
 
         $headers = [
-            'Authorization: Bearer ' . $this->apiKey,
+            'Authorization: ' . $this->apiKey,  // TRIEL doesn't use "Bearer" prefix
             'Content-Type: application/json',
             'Accept: application/json'
         ];
