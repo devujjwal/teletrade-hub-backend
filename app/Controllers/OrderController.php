@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../Services/OrderService.php';
+require_once __DIR__ . '/../Models/User.php';
 
 /**
  * Order Controller
@@ -61,9 +62,20 @@ class OrderController
         }
 
         try {
+            // Validate and sanitize user_id
+            // Only set user_id if it's provided AND the user exists in database
+            $userId = null;
+            if (!empty($input['user_id'])) {
+                $userModel = new User();
+                $user = $userModel->getById($input['user_id']);
+                if ($user) {
+                    $userId = $input['user_id'];
+                }
+            }
+
             // Sanitize addresses
             $billingAddress = [
-                ':user_id' => $input['user_id'] ?? null,
+                ':user_id' => $userId,
                 ':first_name' => Sanitizer::string($input['billing_address']['first_name']),
                 ':last_name' => Sanitizer::string($input['billing_address']['last_name']),
                 ':company' => Sanitizer::string($input['billing_address']['company'] ?? ''),
@@ -80,7 +92,7 @@ class OrderController
             $shippingAddress = null;
             if (!empty($input['shipping_address'])) {
                 $shippingAddress = [
-                    ':user_id' => $input['user_id'] ?? null,
+                    ':user_id' => $userId,
                     ':first_name' => Sanitizer::string($input['shipping_address']['first_name']),
                     ':last_name' => Sanitizer::string($input['shipping_address']['last_name']),
                     ':company' => Sanitizer::string($input['shipping_address']['company'] ?? ''),
@@ -97,7 +109,7 @@ class OrderController
 
             // Create order
             $orderData = [
-                'user_id' => $input['user_id'] ?? null,
+                'user_id' => $userId,
                 'guest_email' => $input['guest_email'] ?? null,
                 'payment_method' => Sanitizer::string($input['payment_method']),
                 'notes' => Sanitizer::string($input['notes'] ?? '')
