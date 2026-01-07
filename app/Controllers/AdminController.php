@@ -7,6 +7,7 @@ require_once __DIR__ . '/../Services/ProductSyncService.php';
 require_once __DIR__ . '/../Services/PricingService.php';
 require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Models/Product.php';
+require_once __DIR__ . '/../Utils/Language.php';
 
 /**
  * Admin Controller
@@ -508,14 +509,27 @@ class AdminController
 
     /**
      * Sync products from vendor
+     * Supports multi-language sync
      */
     public function syncProducts()
     {
         $admin = $this->authMiddleware->verifyAdmin();
 
         try {
-            $lang = $_GET['lang'] ?? 'en';
-            $stats = $this->productSyncService->syncProducts($lang);
+            // Support specific language IDs or sync all languages
+            $languageIds = null;
+            
+            if (isset($_GET['languages'])) {
+                // Parse comma-separated language IDs: ?languages=1,3,4
+                $languageIds = array_map('intval', explode(',', $_GET['languages']));
+            } elseif (isset($_GET['lang'])) {
+                // Single language support (backward compatibility)
+                $langId = is_numeric($_GET['lang']) ? (int)$_GET['lang'] : Language::getIdFromCode($_GET['lang']);
+                $languageIds = [$langId];
+            }
+            
+            // Sync products (null = all languages)
+            $stats = $this->productSyncService->syncProducts($languageIds);
             
             Response::success($stats, 'Product sync completed successfully');
         } catch (Exception $e) {

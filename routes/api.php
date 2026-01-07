@@ -145,18 +145,21 @@ $router = new Router();
 $router->get('', 'HealthController', 'index');
 $router->get('health', 'HealthController', 'check');
 
+// Languages
+$router->get('languages', 'ProductController', 'languages');
+
 // Products
 $router->get('products', 'ProductController', 'index');
-$router->get('products/search', 'ProductController', 'search'); // Must come before products/{id}
-$router->get('products/{id}', 'ProductController', 'show');
+$router->get('products/search', 'ProductController', 'search'); // Must come before products/{slug}
+$router->get('products/{slug}', 'ProductController', 'show');
 
 // Categories
 $router->get('categories', 'ProductController', 'categories');
-$router->get('categories/{id}/products', 'ProductController', 'productsByCategory');
+$router->get('categories/{slug}/products', 'ProductController', 'productsByCategory');
 
 // Brands
 $router->get('brands', 'ProductController', 'brands');
-$router->get('brands/{id}/products', 'ProductController', 'productsByBrand');
+$router->get('brands/{slug}/products', 'ProductController', 'productsByBrand');
 
 // Orders (Customer)
 $router->post('orders', 'OrderController', 'create');

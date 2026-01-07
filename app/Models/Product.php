@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../Utils/Language.php';
+
 /**
  * Product Model
  */
@@ -164,6 +166,26 @@ class Product
     }
 
     /**
+     * Get product by slug
+     */
+    public function getBySlug($slug, $lang = 'en')
+    {
+        $sql = "SELECT * FROM product_list_view WHERE slug = :slug";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':slug' => $slug]);
+        $product = $stmt->fetch();
+
+        if (!$product) {
+            return null;
+        }
+
+        // Get all images
+        $product['images'] = $this->getImages($product['id']);
+
+        return $this->applyLanguage([$product], $lang)[0];
+    }
+
+    /**
      * Get product by vendor article ID
      */
     public function getByVendorArticleId($vendorArticleId)
@@ -314,21 +336,59 @@ class Product
 
     /**
      * Apply language-specific fields
+     * Uses Language utility for proper language handling
      */
     private function applyLanguage($products, $lang)
     {
+        // Normalize language (supports both ID and code)
+        $langCode = Language::normalize($lang);
+        
+        // Get fallback chain (e.g., ['fr', 'en'])
+        $fallbackChain = Language::getFallbackChain($langCode);
+        
         foreach ($products as &$product) {
-            $nameLang = "name_$lang";
-            $descLang = "description_$lang";
-
-            if (!empty($product[$nameLang])) {
-                $product['name'] = $product[$nameLang];
+            // Apply language-specific name with fallback
+            $product['name'] = $this->getTranslatedField($product, 'name', $fallbackChain);
+            
+            // Apply language-specific description with fallback
+            $product['description'] = $this->getTranslatedField($product, 'description', $fallbackChain);
+            
+            // Apply category name if present
+            if (isset($product['category_name'])) {
+                $product['category_name'] = $this->getTranslatedField(
+                    $product, 
+                    'category_name', 
+                    $fallbackChain
+                );
             }
-            if (!empty($product[$descLang])) {
-                $product['description'] = $product[$descLang];
+            
+            // Add language metadata
+            $product['language'] = $langCode;
+        }
+        
+        return $products;
+    }
+    
+    /**
+     * Get translated field value with fallback chain
+     * 
+     * @param array $data Data array containing fields
+     * @param string $fieldBase Base field name (e.g., 'name', 'description')
+     * @param array $fallbackChain Array of language codes to try
+     * @return mixed Translated value or base field value
+     */
+    private function getTranslatedField($data, $fieldBase, $fallbackChain)
+    {
+        // Try each language in the fallback chain
+        foreach ($fallbackChain as $langCode) {
+            $fieldName = "{$fieldBase}_{$langCode}";
+            if (!empty($data[$fieldName])) {
+                return $data[$fieldName];
             }
         }
-        return $products;
+        
+        // Fallback to base field if no translation found
+        return $data[$fieldBase] ?? '';
     }
 
     /**

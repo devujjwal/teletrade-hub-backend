@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
+require_once __DIR__ . '/../Middlewares/LanguageMiddleware.php';
 
 /**
  * Product Controller
@@ -19,6 +20,9 @@ class ProductController
         $this->productModel = new Product();
         $this->categoryModel = new Category();
         $this->brandModel = new Brand();
+        
+        // Initialize language middleware
+        LanguageMiddleware::handle();
     }
 
     /**
@@ -26,7 +30,7 @@ class ProductController
      */
     public function index()
     {
-        $lang = $_GET['lang'] ?? 'en';
+        $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
@@ -88,23 +92,27 @@ class ProductController
                 'total' => $total,
                 'pages' => ceil($total / $limit)
             ],
-            'filters' => $filterOptions
+            'filters' => $filterOptions,
+            'language' => LanguageMiddleware::getLanguageInfo()
         ]);
     }
 
     /**
-     * Get single product
+     * Get single product by slug
      */
-    public function show($id)
+    public function show($slug)
     {
-        $lang = $_GET['lang'] ?? 'en';
-        $product = $this->productModel->getById($id, $lang);
+        $lang = LanguageMiddleware::getCurrentLanguage();
+        $product = $this->productModel->getBySlug($slug, $lang);
 
         if (!$product) {
             Response::notFound('Product not found');
         }
 
-        Response::success(['product' => $product]);
+        Response::success([
+            'product' => $product,
+            'language' => LanguageMiddleware::getLanguageInfo()
+        ]);
     }
 
     /**
@@ -114,7 +122,7 @@ class ProductController
     {
         try {
             $query = Sanitizer::string($_GET['q'] ?? '');
-            $lang = $_GET['lang'] ?? 'en';
+            $lang = LanguageMiddleware::getCurrentLanguage();
             $page = max(1, intval($_GET['page'] ?? 1));
             $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
@@ -135,7 +143,8 @@ class ProductController
                     'total' => $total,
                     'pages' => max(1, ceil($total / $limit))
                 ],
-                'query' => $query
+                'query' => $query,
+                'language' => LanguageMiddleware::getLanguageInfo()
             ]);
         } catch (Exception $e) {
             // Bypass production error sanitization for debugging
@@ -170,27 +179,30 @@ class ProductController
      */
     public function categories()
     {
-        $lang = $_GET['lang'] ?? 'en';
+        $lang = LanguageMiddleware::getCurrentLanguage();
         $categories = $this->categoryModel->getAllWithProductCount($lang);
 
-        Response::success(['categories' => $categories]);
+        Response::success([
+            'categories' => $categories,
+            'language' => LanguageMiddleware::getLanguageInfo()
+        ]);
     }
 
     /**
-     * Get products by category
+     * Get products by category slug
      */
-    public function productsByCategory($categoryId)
+    public function productsByCategory($categorySlug)
     {
-        $lang = $_GET['lang'] ?? 'en';
+        $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
-        $category = $this->categoryModel->getById($categoryId, $lang);
+        $category = $this->categoryModel->getBySlug($categorySlug, $lang);
         if (!$category) {
             Response::notFound('Category not found');
         }
 
-        $filters = ['category_id' => $categoryId, 'is_available' => 1];
+        $filters = ['category_id' => $category['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
 
@@ -202,7 +214,8 @@ class ProductController
                 'limit' => $limit,
                 'total' => $total,
                 'pages' => ceil($total / $limit)
-            ]
+            ],
+            'language' => LanguageMiddleware::getLanguageInfo()
         ]);
     }
 
@@ -211,25 +224,29 @@ class ProductController
      */
     public function brands()
     {
-        $brands = $this->brandModel->getAllWithProductCount();
-        Response::success(['brands' => $brands]);
+        $lang = LanguageMiddleware::getCurrentLanguage();
+        $brands = $this->brandModel->getAllWithProductCount($lang);
+        Response::success([
+            'brands' => $brands,
+            'language' => LanguageMiddleware::getLanguageInfo()
+        ]);
     }
 
     /**
-     * Get products by brand
+     * Get products by brand slug
      */
-    public function productsByBrand($brandId)
+    public function productsByBrand($brandSlug)
     {
-        $lang = $_GET['lang'] ?? 'en';
+        $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
-        $brand = $this->brandModel->getById($brandId);
+        $brand = $this->brandModel->getBySlug($brandSlug);
         if (!$brand) {
             Response::notFound('Brand not found');
         }
 
-        $filters = ['brand_id' => $brandId, 'is_available' => 1];
+        $filters = ['brand_id' => $brand['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
 
@@ -241,7 +258,21 @@ class ProductController
                 'limit' => $limit,
                 'total' => $total,
                 'pages' => ceil($total / $limit)
-            ]
+            ],
+            'language' => LanguageMiddleware::getLanguageInfo()
+        ]);
+    }
+    
+    /**
+     * Get all supported languages
+     */
+    public function languages()
+    {
+        $languages = Language::getAllLanguages();
+        
+        Response::success([
+            'languages' => $languages,
+            'current' => LanguageMiddleware::getLanguageInfo()
         ]);
     }
 }

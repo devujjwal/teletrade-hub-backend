@@ -44,13 +44,13 @@ class ProductApiTest extends TestCase
         
         // Insert products
         $this->db->exec("
-            INSERT INTO products (id, vendor_article_id, sku, name, category_id, brand_id, base_price, price, available_quantity, is_available, is_featured, color, storage, ram) VALUES 
-            (1, 'ART-001', 'SKU-001', 'iPhone 15 Pro', 1, 1, 900.00, 1035.00, 10, 1, 1, 'Black', '256GB', '8GB'),
-            (2, 'ART-002', 'SKU-002', 'iPhone 15', 1, 1, 800.00, 920.00, 5, 1, 0, 'White', '128GB', '6GB'),
-            (3, 'ART-003', 'SKU-003', 'Samsung Galaxy S24', 1, 2, 700.00, 805.00, 8, 1, 1, 'Blue', '256GB', '8GB'),
-            (4, 'ART-004', 'SKU-004', 'iPad Pro', 2, 1, 1000.00, 1150.00, 3, 1, 0, 'Silver', '512GB', '8GB'),
-            (5, 'ART-005', 'SKU-005', 'MacBook Pro', 3, 1, 2000.00, 2300.00, 2, 1, 1, 'Space Gray', '1TB', '16GB'),
-            (6, 'ART-006', 'SKU-006', 'Out of Stock Phone', 1, 1, 500.00, 575.00, 0, 0, 0, 'Black', '64GB', '4GB')
+            INSERT INTO products (id, vendor_article_id, sku, name, slug, category_id, brand_id, base_price, price, available_quantity, is_available, is_featured, color, storage, ram) VALUES 
+            (1, 'ART-001', 'SKU-001', 'iPhone 15 Pro', 'iphone-15-pro', 1, 1, 900.00, 1035.00, 10, 1, 1, 'Black', '256GB', '8GB'),
+            (2, 'ART-002', 'SKU-002', 'iPhone 15', 'iphone-15', 1, 1, 800.00, 920.00, 5, 1, 0, 'White', '128GB', '6GB'),
+            (3, 'ART-003', 'SKU-003', 'Samsung Galaxy S24', 'samsung-galaxy-s24', 1, 2, 700.00, 805.00, 8, 1, 1, 'Blue', '256GB', '8GB'),
+            (4, 'ART-004', 'SKU-004', 'iPad Pro', 'ipad-pro', 2, 1, 1000.00, 1150.00, 3, 1, 0, 'Silver', '512GB', '8GB'),
+            (5, 'ART-005', 'SKU-005', 'MacBook Pro', 'macbook-pro', 3, 1, 2000.00, 2300.00, 2, 1, 1, 'Space Gray', '1TB', '16GB'),
+            (6, 'ART-006', 'SKU-006', 'Out of Stock Phone', 'out-of-stock-phone', 1, 1, 500.00, 575.00, 0, 0, 0, 'Black', '64GB', '4GB')
         ");
     }
     
@@ -248,14 +248,14 @@ class ProductApiTest extends TestCase
     }
     
     /**
-     * Test GET /products/:id - Get single product
+     * Test GET /products/:slug - Get single product
      */
     public function testGetSingleProduct()
     {
         $_GET = ['lang' => 'en'];
         
         ob_start();
-        $this->controller->show(1);
+        $this->controller->show('iphone-15-pro');
         $output = ob_get_clean();
         
         $response = json_decode($output, true);
@@ -267,14 +267,14 @@ class ProductApiTest extends TestCase
     }
     
     /**
-     * Test GET /products/:id - Product not found
+     * Test GET /products/:slug - Product not found
      */
     public function testGetNonExistentProduct()
     {
         $_GET = ['lang' => 'en'];
         
         ob_start();
-        $this->controller->show(999);
+        $this->controller->show('non-existent-product-slug');
         $output = ob_get_clean();
         
         $response = json_decode($output, true);
@@ -318,14 +318,14 @@ class ProductApiTest extends TestCase
     }
     
     /**
-     * Test GET /categories/:id/products
+     * Test GET /categories/:slug/products
      */
     public function testGetProductsByCategory()
     {
         $_GET = ['lang' => 'en', 'page' => 1, 'limit' => 10];
         
         ob_start();
-        $this->controller->productsByCategory(1);
+        $this->controller->productsByCategory('smartphones');
         $output = ob_get_clean();
         
         $response = json_decode($output, true);
@@ -337,14 +337,14 @@ class ProductApiTest extends TestCase
     }
     
     /**
-     * Test GET /brands/:id/products
+     * Test GET /brands/:slug/products
      */
     public function testGetProductsByBrand()
     {
         $_GET = ['lang' => 'en', 'page' => 1, 'limit' => 10];
         
         ob_start();
-        $this->controller->productsByBrand(1);
+        $this->controller->productsByBrand('apple');
         $output = ob_get_clean();
         
         $response = json_decode($output, true);

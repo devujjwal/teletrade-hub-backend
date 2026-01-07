@@ -5,10 +5,12 @@ require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/VendorApiService.php';
 require_once __DIR__ . '/PricingService.php';
+require_once __DIR__ . '/../Utils/Language.php';
 
 /**
  * Product Sync Service
  * Synchronizes products from vendor to local database
+ * Supports multi-language sync
  */
 class ProductSyncService
 {
@@ -31,36 +33,54 @@ class ProductSyncService
     }
 
     /**
-     * Perform full product sync
+     * Perform full product sync across all supported languages
+     * 
+     * @param array $languageIds Array of language IDs to sync (default: all supported)
+     * @return array Sync statistics
      */
-    public function syncProducts($lang = 'en')
+    public function syncProducts($languageIds = null)
     {
         $this->startSyncLog();
 
         try {
-            // Get stock data from vendor
-            $stockData = $this->vendorApi->getStock($lang);
-
-            if (empty($stockData) || !isset($stockData['stock'])) {
-                throw new Exception('Invalid stock data received from vendor');
+            // If no specific languages provided, sync all supported languages
+            if ($languageIds === null) {
+                $languageIds = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All except 0 (default)
             }
-
-            // TRIEL returns data in 'stock' array, not 'products'
-            $products = $stockData['stock'];
+            
             $stats = [
                 'synced' => 0,
                 'added' => 0,
                 'updated' => 0,
-                'disabled' => 0
+                'disabled' => 0,
+                'languages' => []
             ];
 
-            // Process each product
-            foreach ($products as $vendorProduct) {
+            // First, sync in English (base language) to create/update products
+            echo "Syncing products in English (base language)...\n";
+            $baseStats = $this->syncProductsForLanguage(1); // 1 = English
+            $stats['synced'] = $baseStats['synced'];
+            $stats['added'] = $baseStats['added'];
+            $stats['updated'] = $baseStats['updated'];
+            $stats['languages']['en'] = $baseStats;
+            
+            $products = $baseStats['products'] ?? [];
+
+            // Then sync other languages to populate translation columns
+            foreach ($languageIds as $langId) {
+                if ($langId == 1) continue; // Skip English, already done
+                
+                $langCode = Language::getCodeFromId($langId);
+                $langInfo = Language::getLanguageById($langId);
+                
+                echo "Syncing translations for {$langInfo['name']} (ID: {$langId})...\n";
+                
                 try {
-                    $this->syncSingleProduct($vendorProduct, $stats);
+                    $langStats = $this->syncTranslationsForLanguage($langId, $products);
+                    $stats['languages'][$langCode] = $langStats;
                 } catch (Exception $e) {
-                    error_log("Failed to sync product {$vendorProduct['id']}: " . $e->getMessage());
-                    continue;
+                    error_log("Failed to sync language {$langCode}: " . $e->getMessage());
+                    $stats['languages'][$langCode] = ['error' => $e->getMessage()];
                 }
             }
 
@@ -75,14 +95,134 @@ class ProductSyncService
             throw $e;
         }
     }
+    
+    /**
+     * Sync products for a specific language (creates/updates products)
+     * Used for base language sync
+     */
+    private function syncProductsForLanguage($languageId)
+    {
+        $stockData = $this->vendorApi->getStock($languageId);
+
+        if (empty($stockData) || !isset($stockData['stock'])) {
+            throw new Exception('Invalid stock data received from vendor');
+        }
+
+        $products = $stockData['stock'];
+        $stats = [
+            'synced' => 0,
+            'added' => 0,
+            'updated' => 0,
+            'products' => []
+        ];
+
+        // Process each product
+        foreach ($products as $vendorProduct) {
+            try {
+                $this->syncSingleProduct($vendorProduct, $stats, $languageId);
+                $stats['products'][] = $vendorProduct;
+            } catch (Exception $e) {
+                $productId = $vendorProduct['sku'] ?? $vendorProduct['id'] ?? 'unknown';
+                error_log("Failed to sync product {$productId}: " . $e->getMessage());
+                continue;
+            }
+        }
+
+        return $stats;
+    }
+    
+    /**
+     * Sync translations for a specific language (updates only language columns)
+     * Used for non-base language sync
+     */
+    private function syncTranslationsForLanguage($languageId, $baseProducts)
+    {
+        $langCode = Language::getCodeFromId($languageId);
+        $stockData = $this->vendorApi->getStock($languageId);
+
+        if (empty($stockData) || !isset($stockData['stock'])) {
+            throw new Exception('Invalid stock data received from vendor');
+        }
+
+        $products = $stockData['stock'];
+        $stats = ['translated' => 0, 'skipped' => 0];
+
+        // Create SKU map for quick lookup
+        $productMap = [];
+        foreach ($products as $product) {
+            $sku = $product['sku'] ?? null;
+            if ($sku) {
+                $productMap[$sku] = $product;
+            }
+        }
+
+        // Update translations for existing products
+        foreach ($baseProducts as $baseProduct) {
+            $sku = $baseProduct['sku'] ?? null;
+            if (!$sku || !isset($productMap[$sku])) {
+                $stats['skipped']++;
+                continue;
+            }
+
+            $translatedProduct = $productMap[$sku];
+            
+            try {
+                // Get existing product from database
+                $existingProduct = $this->productModel->getByVendorArticleId($sku);
+                if (!$existingProduct) {
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                // Extract translated fields
+                $properties = $translatedProduct['properties'] ?? [];
+                $productName = $properties['full_name'] ?? ($translatedProduct['model'] ?? null);
+                $categoryName = $translatedProduct['cat_name'] ?? $translatedProduct['category'] ?? null;
+
+                // Update only language-specific columns
+                $updateData = [
+                    "name_{$langCode}" => $productName,
+                    "description_{$langCode}" => null, // Vendor doesn't provide description
+                ];
+
+                $this->productModel->update($existingProduct['id'], $updateData);
+                
+                // Update category translation if exists
+                if ($categoryName && $existingProduct['category_id']) {
+                    $this->updateCategoryTranslation($existingProduct['category_id'], $langCode, $categoryName);
+                }
+                
+                $stats['translated']++;
+            } catch (Exception $e) {
+                error_log("Failed to update translation for SKU {$sku} in {$langCode}: " . $e->getMessage());
+                $stats['skipped']++;
+            }
+        }
+
+        return $stats;
+    }
+    
+    /**
+     * Update category translation
+     */
+    private function updateCategoryTranslation($categoryId, $langCode, $name)
+    {
+        try {
+            $this->categoryModel->update($categoryId, [
+                "name_{$langCode}" => $name
+            ]);
+        } catch (Exception $e) {
+            error_log("Failed to update category translation: " . $e->getMessage());
+        }
+    }
 
     /**
      * Sync single product
      */
-    private function syncSingleProduct($vendorProduct, &$stats)
+    private function syncSingleProduct($vendorProduct, &$stats, $languageId = 1)
     {
         // Normalize vendor data
-        $normalized = $this->normalizeVendorProduct($vendorProduct);
+        $normalized = $this->normalizeVendorProduct($vendorProduct, $languageId);
 
         // Extract images - TRIEL provides both 'images' array and single 'image' field
         $productImages = [];
@@ -116,11 +256,16 @@ class ProductSyncService
 
     /**
      * Normalize vendor product data (TRIEL format)
+     * 
+     * @param array $vendorProduct Product data from vendor API
+     * @param int $languageId Language ID used for the API call
+     * @return array Normalized product data ready for database
      */
-    private function normalizeVendorProduct($vendorProduct)
+    private function normalizeVendorProduct($vendorProduct, $languageId = 1)
     {
         // TRIEL returns: name (brand), model (product), sku, price, in_stock, color, properties{}, category, cat_name
         $properties = $vendorProduct['properties'] ?? [];
+        $langCode = Language::getCodeFromId($languageId);
         
         // Get or create brand (TRIEL 'name' field is the brand)
         $brandId = null;
@@ -135,7 +280,7 @@ class ProductSyncService
             $categoryId = $this->getOrCreateCategory([
                 'id' => $vendorProduct['category'] ?? $categoryName,
                 'name' => $categoryName,
-                'name_en' => $categoryName
+                "name_{$langCode}" => $categoryName
             ]);
         }
 
@@ -157,8 +302,8 @@ class ProductSyncService
         // Product name - use full_name from properties, fallback to model field
         $productName = $properties['full_name'] ?? ($vendorProduct['model'] ?? 'Unnamed Product');
         
-        // Generate slug
-        $slug = $this->generateSlug($productName);
+        // Generate slug (only for English/base language)
+        $slug = ($languageId == 1) ? $this->generateSlug($productName) : null;
 
         // Stock quantity
         $stockQuantity = intval($vendorProduct['in_stock'] ?? 0);
@@ -168,18 +313,12 @@ class ProductSyncService
         $ram = $this->extractRAM($productName, $properties);
         $ean = $properties['ean'] ?? $vendorProduct['ean'] ?? null;
 
-        return [
+        // Build data array with language-specific columns
+        $data = [
             ':vendor_article_id' => $vendorProduct['sku'], // TRIEL uses 'sku' as unique ID
             ':sku' => $vendorProduct['sku'],
             ':ean' => $ean,
             ':name' => $productName,
-            ':name_de' => null,
-            ':name_en' => $productName,
-            ':name_sk' => null,
-            ':description' => null,
-            ':description_de' => null,
-            ':description_en' => null,
-            ':description_sk' => null,
             ':category_id' => $categoryId,
             ':brand_id' => $brandId,
             ':warranty_id' => $warrantyId,
@@ -195,9 +334,19 @@ class ProductSyncService
             ':storage' => $storage,
             ':ram' => $ram,
             ':specifications' => !empty($properties) ? json_encode($properties) : null,
-            ':slug' => $slug,
             ':last_synced_at' => date('Y-m-d H:i:s')
         ];
+        
+        // Add slug only for base language
+        if ($slug) {
+            $data[':slug'] = $slug;
+        }
+        
+        // Add language-specific name column
+        $data[":name_{$langCode}"] = $productName;
+        $data[":description_{$langCode}"] = null; // Vendor doesn't provide descriptions
+
+        return $data;
     }
 
     /**
@@ -212,6 +361,18 @@ class ProductSyncService
         if ($vendorId) {
             $existing = $this->categoryModel->getByVendorId($vendorId);
             if ($existing) {
+                // Update with new language data if provided
+                if (is_array($categoryData)) {
+                    $updateData = [];
+                    foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+                        if (isset($categoryData["name_{$lang}"])) {
+                            $updateData["name_{$lang}"] = $categoryData["name_{$lang}"];
+                        }
+                    }
+                    if (!empty($updateData)) {
+                        $this->categoryModel->update($existing['id'], $updateData);
+                    }
+                }
                 return $existing['id'];
             }
         }
@@ -221,9 +382,6 @@ class ProductSyncService
         $data = [
             ':vendor_id' => $vendorId,
             ':name' => $name,
-            ':name_de' => is_array($categoryData) ? ($categoryData['name_de'] ?? null) : null,
-            ':name_en' => is_array($categoryData) ? ($categoryData['name_en'] ?? null) : null,
-            ':name_sk' => is_array($categoryData) ? ($categoryData['name_sk'] ?? null) : null,
             ':slug' => $slug,
             ':parent_id' => null,
             ':description' => null,
@@ -231,6 +389,11 @@ class ProductSyncService
             ':sort_order' => 0,
             ':is_active' => 1
         ];
+        
+        // Add all language fields
+        foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+            $data[":name_{$lang}"] = is_array($categoryData) ? ($categoryData["name_{$lang}"] ?? null) : null;
+        }
 
         return $this->categoryModel->create($data);
     }

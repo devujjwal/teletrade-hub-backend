@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../Utils/Language.php';
+
 /**
  * Vendor API Service
  * Handles all interactions with TRIEL B2B API
@@ -19,23 +21,28 @@ class VendorApiService
 
     /**
      * Get stock data from vendor
+     * 
+     * @param int|string $lang Language ID (0-11) or code ('en', 'de', etc.)
+     * @return array Stock data from vendor
      */
-    public function getStock($lang = 'en')
+    public function getStock($lang = 1)
     {
         $startTime = microtime(true);
         
         try {
-            // TRIEL uses lang_id: 0=EN, 1=SK, 2=DE
-            $langId = $lang === 'sk' ? 1 : ($lang === 'de' ? 2 : 0);
+            // Convert language code to ID if needed
+            // Vendor API accepts language IDs: 0=Default, 1=English, 3=German, etc.
+            $langId = is_numeric($lang) ? (int)$lang : Language::getIdFromCode($lang);
+            
             $response = $this->makeRequest('GET', '/getStock/', ['lang_id' => $langId, 'price_drop' => 0]);
             
             $duration = round((microtime(true) - $startTime) * 1000);
-            $this->logApiCall('GetStock', 'GET', ['lang' => $lang], $response, 200, $duration);
+            $this->logApiCall('GetStock', 'GET', ['lang_id' => $langId], $response, 200, $duration);
             
             return $response;
         } catch (Exception $e) {
             $duration = round((microtime(true) - $startTime) * 1000);
-            $this->logApiCall('GetStock', 'GET', ['lang' => $lang], null, 0, $duration, $e->getMessage());
+            $this->logApiCall('GetStock', 'GET', ['lang_id' => $langId ?? $lang], null, 0, $duration, $e->getMessage());
             throw $e;
         }
     }
@@ -127,21 +134,28 @@ class VendorApiService
 
     /**
      * Get article details
+     * 
+     * @param string $articleId Article/SKU identifier
+     * @param int|string $lang Language ID (0-11) or code ('en', 'de', etc.)
+     * @return array Article details
      */
-    public function getArticleDetails($articleId, $lang = 'en')
+    public function getArticleDetails($articleId, $lang = 1)
     {
         $startTime = microtime(true);
         
         try {
-            $response = $this->makeRequest('GET', "/GetArticle/$articleId", ['lang' => $lang]);
+            // Convert language code to ID if needed
+            $langId = is_numeric($lang) ? (int)$lang : Language::getIdFromCode($lang);
+            
+            $response = $this->makeRequest('GET', "/GetArticle/$articleId", ['lang_id' => $langId]);
             
             $duration = round((microtime(true) - $startTime) * 1000);
-            $this->logApiCall("GetArticle/$articleId", 'GET', ['lang' => $lang], $response, 200, $duration);
+            $this->logApiCall("GetArticle/$articleId", 'GET', ['lang_id' => $langId], $response, 200, $duration);
             
             return $response;
         } catch (Exception $e) {
             $duration = round((microtime(true) - $startTime) * 1000);
-            $this->logApiCall("GetArticle/$articleId", 'GET', ['lang' => $lang], null, 0, $duration, $e->getMessage());
+            $this->logApiCall("GetArticle/$articleId", 'GET', ['lang_id' => $langId ?? $lang], null, 0, $duration, $e->getMessage());
             throw $e;
         }
     }

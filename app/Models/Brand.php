@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../Utils/Language.php';
+
 /**
  * Brand Model
  */
@@ -15,22 +17,29 @@ class Brand
     /**
      * Get all active brands
      */
-    public function getAll()
+    public function getAll($lang = 'en')
     {
         $sql = "SELECT * FROM brands WHERE is_active = 1 ORDER BY name ASC";
         $stmt = $this->db->query($sql);
-        return $stmt->fetchAll();
+        $brands = $stmt->fetchAll();
+        return $this->applyLanguage($brands, $lang);
     }
 
     /**
      * Get brand by ID
      */
-    public function getById($id)
+    public function getById($id, $lang = 'en')
     {
         $sql = "SELECT * FROM brands WHERE id = :id";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id' => $id]);
-        return $stmt->fetch();
+        $brand = $stmt->fetch();
+        
+        if (!$brand) {
+            return null;
+        }
+        
+        return $this->applyLanguage([$brand], $lang)[0];
     }
 
     /**
@@ -89,7 +98,7 @@ class Brand
     /**
      * Get brands with product count
      */
-    public function getAllWithProductCount()
+    public function getAllWithProductCount($lang = 'en')
     {
         $sql = "SELECT b.*, COUNT(p.id) as product_count 
                 FROM brands b
@@ -99,7 +108,36 @@ class Brand
                 ORDER BY b.name ASC";
         
         $stmt = $this->db->query($sql);
-        return $stmt->fetchAll();
+        $brands = $stmt->fetchAll();
+        return $this->applyLanguage($brands, $lang);
+    }
+    
+    /**
+     * Apply language-specific fields with fallback support
+     */
+    private function applyLanguage($brands, $lang)
+    {
+        // Normalize language (supports both ID and code)
+        $langCode = Language::normalize($lang);
+        
+        // Get fallback chain (e.g., ['fr', 'en'])
+        $fallbackChain = Language::getFallbackChain($langCode);
+        
+        foreach ($brands as &$brand) {
+            // Try each language in the fallback chain for description
+            foreach ($fallbackChain as $fallbackLang) {
+                $descLang = "description_{$fallbackLang}";
+                if (!empty($brand[$descLang])) {
+                    $brand['description'] = $brand[$descLang];
+                    break;
+                }
+            }
+            
+            // Add language metadata
+            $brand['language'] = $langCode;
+        }
+        
+        return $brands;
     }
 }
 

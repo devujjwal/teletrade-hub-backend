@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../Utils/Language.php';
+
 /**
  * Category Model
  */
@@ -74,10 +76,12 @@ class Category
     public function create($data)
     {
         $sql = "INSERT INTO categories (
-            vendor_id, name, name_de, name_en, name_sk, slug, parent_id,
+            vendor_id, name, name_en, name_de, name_sk, name_fr, name_es, name_ru, 
+            name_it, name_tr, name_ro, name_pl, slug, parent_id,
             description, image_url, sort_order, is_active
         ) VALUES (
-            :vendor_id, :name, :name_de, :name_en, :name_sk, :slug, :parent_id,
+            :vendor_id, :name, :name_en, :name_de, :name_sk, :name_fr, :name_es, :name_ru,
+            :name_it, :name_tr, :name_ro, :name_pl, :slug, :parent_id,
             :description, :image_url, :sort_order, :is_active
         )";
 
@@ -148,17 +152,32 @@ class Category
     }
 
     /**
-     * Apply language-specific fields
+     * Apply language-specific fields with fallback support
      */
     private function applyLanguage($categories, $lang)
     {
+        // Normalize language (supports both ID and code)
+        $langCode = Language::normalize($lang);
+        
+        // Get fallback chain (e.g., ['fr', 'en'])
+        $fallbackChain = Language::getFallbackChain($langCode);
+        
         foreach ($categories as &$category) {
-            $nameLang = "name_$lang";
-
-            if (!empty($category[$nameLang])) {
-                $category['name'] = $category[$nameLang];
+            // Try each language in the fallback chain
+            $nameFound = false;
+            foreach ($fallbackChain as $fallbackLang) {
+                $nameLang = "name_{$fallbackLang}";
+                if (!empty($category[$nameLang])) {
+                    $category['name'] = $category[$nameLang];
+                    $nameFound = true;
+                    break;
+                }
             }
+            
+            // Add language metadata
+            $category['language'] = $langCode;
         }
+        
         return $categories;
     }
 }

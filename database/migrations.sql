@@ -14,9 +14,16 @@ CREATE TABLE IF NOT EXISTS `categories` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `vendor_id` VARCHAR(100) NULL,
   `name` VARCHAR(255) NOT NULL,
-  `name_de` VARCHAR(255) NULL,
   `name_en` VARCHAR(255) NULL,
+  `name_de` VARCHAR(255) NULL,
   `name_sk` VARCHAR(255) NULL,
+  `name_fr` VARCHAR(255) NULL,
+  `name_es` VARCHAR(255) NULL,
+  `name_ru` VARCHAR(255) NULL,
+  `name_it` VARCHAR(255) NULL,
+  `name_tr` VARCHAR(255) NULL,
+  `name_ro` VARCHAR(255) NULL,
+  `name_pl` VARCHAR(255) NULL,
   `slug` VARCHAR(255) NOT NULL,
   `parent_id` INT UNSIGNED NULL,
   `description` TEXT NULL,
@@ -40,6 +47,16 @@ CREATE TABLE IF NOT EXISTS `brands` (
   `slug` VARCHAR(255) NOT NULL,
   `logo_url` VARCHAR(500) NULL,
   `description` TEXT NULL,
+  `description_en` TEXT NULL,
+  `description_de` TEXT NULL,
+  `description_sk` TEXT NULL,
+  `description_fr` TEXT NULL,
+  `description_es` TEXT NULL,
+  `description_ru` TEXT NULL,
+  `description_it` TEXT NULL,
+  `description_tr` TEXT NULL,
+  `description_ro` TEXT NULL,
+  `description_pl` TEXT NULL,
   `website` VARCHAR(500) NULL,
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -66,13 +83,27 @@ CREATE TABLE IF NOT EXISTS `products` (
   `sku` VARCHAR(100) NOT NULL,
   `ean` VARCHAR(50) NULL,
   `name` VARCHAR(500) NOT NULL,
-  `name_de` VARCHAR(500) NULL,
   `name_en` VARCHAR(500) NULL,
+  `name_de` VARCHAR(500) NULL,
   `name_sk` VARCHAR(500) NULL,
+  `name_fr` VARCHAR(500) NULL,
+  `name_es` VARCHAR(500) NULL,
+  `name_ru` VARCHAR(500) NULL,
+  `name_it` VARCHAR(500) NULL,
+  `name_tr` VARCHAR(500) NULL,
+  `name_ro` VARCHAR(500) NULL,
+  `name_pl` VARCHAR(500) NULL,
   `description` TEXT NULL,
-  `description_de` TEXT NULL,
   `description_en` TEXT NULL,
+  `description_de` TEXT NULL,
   `description_sk` TEXT NULL,
+  `description_fr` TEXT NULL,
+  `description_es` TEXT NULL,
+  `description_ru` TEXT NULL,
+  `description_it` TEXT NULL,
+  `description_tr` TEXT NULL,
+  `description_ro` TEXT NULL,
+  `description_pl` TEXT NULL,
   `category_id` INT UNSIGNED NULL,
   `brand_id` INT UNSIGNED NULL,
   `warranty_id` INT UNSIGNED NULL,
@@ -386,15 +417,24 @@ ON DUPLICATE KEY UPDATE `key` = `key`;
 -- INDEXES FOR PERFORMANCE
 -- =====================================================
 
--- Additional indexes for common queries
-ALTER TABLE `products` ADD FULLTEXT KEY `search_name` (`name`, `name_en`, `name_de`, `name_sk`);
-ALTER TABLE `products` ADD FULLTEXT KEY `search_description` (`description`, `description_en`, `description_de`, `description_sk`);
+-- Additional indexes for common queries with all language columns
+ALTER TABLE `products` ADD FULLTEXT KEY `search_name` (
+  `name`, `name_en`, `name_de`, `name_sk`, 
+  `name_fr`, `name_es`, `name_ru`, `name_it`, 
+  `name_tr`, `name_ro`, `name_pl`
+);
+
+ALTER TABLE `products` ADD FULLTEXT KEY `search_description` (
+  `description`, `description_en`, `description_de`, `description_sk`,
+  `description_fr`, `description_es`, `description_ru`, `description_it`,
+  `description_tr`, `description_ro`, `description_pl`
+);
 
 -- =====================================================
 -- VIEWS
 -- =====================================================
 
--- View for product listing with related data
+-- View for product listing with related data (includes all language columns)
 CREATE OR REPLACE VIEW `product_list_view` AS
 SELECT 
   p.id,
@@ -405,6 +445,24 @@ SELECT
   p.name_en,
   p.name_de,
   p.name_sk,
+  p.name_fr,
+  p.name_es,
+  p.name_ru,
+  p.name_it,
+  p.name_tr,
+  p.name_ro,
+  p.name_pl,
+  p.description,
+  p.description_en,
+  p.description_de,
+  p.description_sk,
+  p.description_fr,
+  p.description_es,
+  p.description_ru,
+  p.description_it,
+  p.description_tr,
+  p.description_ro,
+  p.description_pl,
   p.slug,
   p.base_price,
   p.price,
@@ -418,6 +476,16 @@ SELECT
   p.ram,
   c.id AS category_id,
   c.name AS category_name,
+  c.name_en AS category_name_en,
+  c.name_de AS category_name_de,
+  c.name_sk AS category_name_sk,
+  c.name_fr AS category_name_fr,
+  c.name_es AS category_name_es,
+  c.name_ru AS category_name_ru,
+  c.name_it AS category_name_it,
+  c.name_tr AS category_name_tr,
+  c.name_ro AS category_name_ro,
+  c.name_pl AS category_name_pl,
   c.slug AS category_slug,
   b.id AS brand_id,
   b.name AS brand_name,
@@ -432,4 +500,36 @@ FROM products p
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN warranties w ON p.warranty_id = w.id;
+
+-- =====================================================
+-- LANGUAGES REFERENCE TABLE
+-- =====================================================
+
+-- Create languages reference table for multi-language support
+CREATE TABLE IF NOT EXISTS `languages` (
+  `id` INT UNSIGNED NOT NULL,
+  `code` VARCHAR(2) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `is_active` TINYINT(1) DEFAULT 1,
+  `sort_order` INT DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Insert supported languages
+INSERT INTO `languages` (`id`, `code`, `name`, `is_active`, `sort_order`) VALUES
+(0, 'en', 'Default (English)', 1, 0),
+(1, 'en', 'English', 1, 1),
+(3, 'de', 'German', 1, 3),
+(4, 'fr', 'French', 1, 4),
+(5, 'es', 'Spanish', 1, 5),
+(6, 'ru', 'Russian', 1, 6),
+(7, 'it', 'Italian', 1, 7),
+(8, 'tr', 'Turkish', 1, 8),
+(9, 'ro', 'Romanian', 1, 9),
+(10, 'sk', 'Slovakian', 1, 10),
+(11, 'pl', 'Polish', 1, 11)
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
