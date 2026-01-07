@@ -376,17 +376,31 @@ class AdminController
      */
     public function login()
     {
+        // Add diagnostic logging
+        error_log("=== ADMIN LOGIN START ===");
+        error_log("Request method: " . $_SERVER['REQUEST_METHOD']);
+        error_log("Request URI: " . $_SERVER['REQUEST_URI']);
+        
         try {
+            error_log("Step 1: Reading input");
             $input = json_decode(file_get_contents('php://input'), true);
+            error_log("Input received: " . ($input ? 'YES' : 'NO'));
 
             if (!$input) {
+                error_log("Error: No input data");
                 Response::error('Invalid request data', 400);
             }
 
+            error_log("Step 2: Getting client IP");
             // SECURITY: Strict rate limiting for admin login (more restrictive than customer login)
             $clientIp = RateLimitMiddleware::getClientIdentifier();
+            error_log("Client IP: " . $clientIp);
+            
+            error_log("Step 3: Enforcing rate limit");
             $this->rateLimiter->enforce($clientIp, 'admin_login', 3, 900); // 3 attempts per 15 minutes
+            error_log("Rate limit OK")
 
+            error_log("Step 4: Validating input");
             // Validate input
             $errors = Validator::validate($input, [
                 'username' => 'required',
@@ -394,41 +408,54 @@ class AdminController
             ]);
 
             if (!empty($errors)) {
+                error_log("Validation failed: " . json_encode($errors));
                 Response::error('Validation failed', 400, $errors);
             }
+            error_log("Validation OK");
+
+            error_log("Step 5: Querying database for admin user");
             // Get admin user
             $sql = "SELECT * FROM admin_users WHERE username = :username AND is_active = 1";
             $stmt = $this->db->prepare($sql);
             $stmt->execute([':username' => Sanitizer::string($input['username'])]);
             $admin = $stmt->fetch();
+            error_log("Admin found: " . ($admin ? 'YES (ID: ' . $admin['id'] . ')' : 'NO'));
 
             if (!$admin || !password_verify($input['password'], $admin['password_hash'])) {
                 // SECURITY: Generic error message to prevent username enumeration
+                error_log("Invalid credentials - admin not found or password mismatch");
                 Response::error('Invalid credentials', 401);
             }
 
+            error_log("Step 6: Password verified, clearing rate limit");
             // SECURITY: Clear rate limit on successful login
             $this->rateLimiter->clearLimit($clientIp, 'admin_login');
 
+            error_log("Step 7: Updating last login time");
             // Update last login
             $updateSql = "UPDATE admin_users SET last_login_at = NOW() WHERE id = :id";
             $updateStmt = $this->db->prepare($updateSql);
             $updateStmt->execute([':id' => $admin['id']]);
 
+            error_log("Step 8: Creating admin session");
             // Create session token
             $session = $this->authMiddleware->createAdminSession($admin['id']);
+            error_log("Session created successfully");
 
+            error_log("Step 9: Preparing response");
             // SECURITY: Log admin login for audit trail
             error_log("AUDIT: Admin login successful - Username: {$admin['username']}, IP: $clientIp");
 
             // Remove password hash
             unset($admin['password_hash']);
 
+            error_log("Step 10: Sending success response");
             Response::success([
                 'admin' => $admin,
                 'token' => $session['token'],
                 'expires_at' => $session['expires_at']
             ], 'Login successful');
+            error_log("=== ADMIN LOGIN SUCCESS ===");
         } catch (Exception $e) {
             // SECURITY: Log failed login attempts with full error details
             $errorDetails = [
