@@ -43,11 +43,11 @@ class Category
     }
 
     /**
-     * Get category by slug
+     * Get category by slug (case-insensitive)
      */
     public function getBySlug($slug, $lang = 'en')
     {
-        $sql = "SELECT * FROM categories WHERE slug = :slug";
+        $sql = "SELECT * FROM categories WHERE LOWER(slug) = LOWER(:slug) AND is_active = 1";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':slug' => $slug]);
         $category = $stmt->fetch();

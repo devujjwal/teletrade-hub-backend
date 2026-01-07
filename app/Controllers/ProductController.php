@@ -241,7 +241,7 @@ class ProductController
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
-        $brand = $this->brandModel->getBySlug($brandSlug);
+        $brand = $this->brandModel->getBySlug($brandSlug, $lang);
         if (!$brand) {
             Response::notFound('Brand not found');
         }

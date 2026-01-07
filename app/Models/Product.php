@@ -166,14 +166,24 @@ class Product
     }
 
     /**
-     * Get product by slug
+     * Get product by slug (case-insensitive)
+     * Falls back to vendor_article_id or SKU if slug not found
      */
     public function getBySlug($slug, $lang = 'en')
     {
-        $sql = "SELECT * FROM product_list_view WHERE slug = :slug";
+        // First try by slug
+        $sql = "SELECT * FROM product_list_view WHERE LOWER(slug) = LOWER(:slug)";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':slug' => $slug]);
         $product = $stmt->fetch();
+
+        // If not found by slug, try by vendor_article_id (in case slug is actually a SKU)
+        if (!$product) {
+            $sql = "SELECT * FROM product_list_view WHERE vendor_article_id = :slug OR sku = :slug";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':slug' => $slug]);
+            $product = $stmt->fetch();
+        }
 
         if (!$product) {
             return null;

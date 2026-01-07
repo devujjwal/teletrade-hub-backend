@@ -43,14 +43,20 @@ class Brand
     }
 
     /**
-     * Get brand by slug
+     * Get brand by slug (case-insensitive)
      */
-    public function getBySlug($slug)
+    public function getBySlug($slug, $lang = 'en')
     {
-        $sql = "SELECT * FROM brands WHERE slug = :slug";
+        $sql = "SELECT * FROM brands WHERE LOWER(slug) = LOWER(:slug) AND is_active = 1";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':slug' => $slug]);
-        return $stmt->fetch();
+        $brand = $stmt->fetch();
+        
+        if (!$brand) {
+            return null;
+        }
+        
+        return $this->applyLanguage([$brand], $lang)[0];
     }
 
     /**

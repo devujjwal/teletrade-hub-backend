@@ -236,6 +236,10 @@ class ProductSyncService
         $existingProduct = $this->productModel->getByVendorArticleId($normalized[':vendor_article_id']);
 
         if ($existingProduct) {
+            // Ensure slug exists for existing products (in case it was created before slug generation)
+            if (empty($normalized[':slug']) && empty($existingProduct['slug']) && $languageId == 1) {
+                $normalized[':slug'] = $this->generateSlug($normalized[':name']);
+            }
             // Update existing product
             $this->productModel->update($existingProduct['id'], $normalized);
             $stats['updated']++;
