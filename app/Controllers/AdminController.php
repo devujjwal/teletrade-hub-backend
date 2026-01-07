@@ -289,27 +289,26 @@ class AdminController
      */
     public function login()
     {
-        $input = json_decode(file_get_contents('php://input'), true);
-
-        if (!$input) {
-            Response::error('Invalid request data', 400);
-        }
-
-        // SECURITY: Strict rate limiting for admin login (more restrictive than customer login)
-        $clientIp = RateLimitMiddleware::getClientIdentifier();
-        $this->rateLimiter->enforce($clientIp, 'admin_login', 3, 900); // 3 attempts per 15 minutes
-
-        // Validate input
-        $errors = Validator::validate($input, [
-            'username' => 'required',
-            'password' => 'required'
-        ]);
-
-        if (!empty($errors)) {
-            Response::error('Validation failed', 400, $errors);
-        }
-
         try {
+            $input = json_decode(file_get_contents('php://input'), true);
+
+            if (!$input) {
+                Response::error('Invalid request data', 400);
+            }
+
+            // SECURITY: Strict rate limiting for admin login (more restrictive than customer login)
+            $clientIp = RateLimitMiddleware::getClientIdentifier();
+            $this->rateLimiter->enforce($clientIp, 'admin_login', 3, 900); // 3 attempts per 15 minutes
+
+            // Validate input
+            $errors = Validator::validate($input, [
+                'username' => 'required',
+                'password' => 'required'
+            ]);
+
+            if (!empty($errors)) {
+                Response::error('Validation failed', 400, $errors);
+            }
             // Get admin user
             $sql = "SELECT * FROM admin_users WHERE username = :username AND is_active = 1";
             $stmt = $this->db->prepare($sql);
@@ -344,9 +343,30 @@ class AdminController
                 'expires_at' => $session['expires_at']
             ], 'Login successful');
         } catch (Exception $e) {
-            // SECURITY: Log failed login attempts
-            error_log("AUDIT: Admin login failed - Username: " . ($input['username'] ?? 'unknown') . ", IP: $clientIp");
-            Response::error('Login failed: ' . $e->getMessage(), 500);
+            // SECURITY: Log failed login attempts with full error details
+            $errorDetails = [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ];
+            error_log("AUDIT: Admin login failed - Username: " . ($input['username'] ?? 'unknown') . ", IP: $clientIp, Error: " . json_encode($errorDetails));
+            
+            // In development, show full error; in production, show generic message
+            $errorMessage = (Env::get('APP_ENV') === 'development') 
+                ? 'Login failed: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()
+                : 'Login failed. Please try again.';
+            
+            Response::error($errorMessage, 500);
+        } catch (Error $e) {
+            // Catch PHP fatal errors
+            error_log("AUDIT: Admin login PHP Error - Username: " . ($input['username'] ?? 'unknown') . ", IP: $clientIp, Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            
+            $errorMessage = (Env::get('APP_ENV') === 'development') 
+                ? 'Login failed: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()
+                : 'Login failed. Please try again.';
+            
+            Response::error($errorMessage, 500);
         }
     }
 

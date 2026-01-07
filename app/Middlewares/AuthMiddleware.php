@@ -1,5 +1,9 @@
 <?php
 
+if (!class_exists('Env')) {
+    require_once __DIR__ . '/../Config/env.php';
+}
+
 /**
  * Authentication Middleware
  * Validates admin authentication tokens
