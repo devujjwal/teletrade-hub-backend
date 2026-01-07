@@ -1,0 +1,651 @@
+<?php
+
+require_once __DIR__ . '/../Models/Product.php';
+require_once __DIR__ . '/../Models/Category.php';
+require_once __DIR__ . '/../Models/Brand.php';
+require_once __DIR__ . '/VendorApiService.php';
+require_once __DIR__ . '/PricingService.php';
+require_once __DIR__ . '/../Utils/Language.php';
+
+/**
+ * Product Sync Service
+ * Synchronizes products from vendor to local database
+ * Supports multi-language sync
+ */
+class ProductSyncService
+{
+    private $vendorApi;
+    private $productModel;
+    private $categoryModel;
+    private $brandModel;
+    private $pricingService;
+    private $db;
+    private $syncLogId;
+
+    public function __construct()
+    {
+        $this->vendorApi = new VendorApiService();
+        $this->productModel = new Product();
+        $this->categoryModel = new Category();
+        $this->brandModel = new Brand();
+        $this->pricingService = new PricingService();
+        $this->db = Database::getConnection();
+    }
+
+    /**
+     * Perform full product sync across all supported languages
+     * 
+     * @param array $languageIds Array of language IDs to sync (default: all supported)
+     * @return array Sync statistics
+     */
+    public function syncProducts($languageIds = null)
+    {
+        $this->startSyncLog();
+
+        try {
+            // If no specific languages provided, sync all supported languages
+            if ($languageIds === null) {
+                $languageIds = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All except 0 (default)
+            }
+            
+            $stats = [
+                'synced' => 0,
+                'added' => 0,
+                'updated' => 0,
+                'disabled' => 0,
+                'languages' => []
+            ];
+
+            // First, sync in English (base language) to create/update products
+            echo "Syncing products in English (base language)...\n";
+            $baseStats = $this->syncProductsForLanguage(1); // 1 = English
+            $stats['synced'] = $baseStats['synced'];
+            $stats['added'] = $baseStats['added'];
+            $stats['updated'] = $baseStats['updated'];
+            $stats['languages']['en'] = $baseStats;
+            
+            $products = $baseStats['products'] ?? [];
+
+            // Then sync other languages to populate translation columns
+            foreach ($languageIds as $langId) {
+                if ($langId == 1) continue; // Skip English, already done
+                
+                $langCode = Language::getCodeFromId($langId);
+                $langInfo = Language::getLanguageById($langId);
+                
+                echo "Syncing translations for {$langInfo['name']} (ID: {$langId})...\n";
+                
+                try {
+                    $langStats = $this->syncTranslationsForLanguage($langId, $products);
+                    $stats['languages'][$langCode] = $langStats;
+                } catch (Exception $e) {
+                    error_log("Failed to sync language {$langCode}: " . $e->getMessage());
+                    $stats['languages'][$langCode] = ['error' => $e->getMessage()];
+                }
+            }
+
+            // Disable products that are no longer in vendor stock
+            $stats['disabled'] = $this->disableUnavailableProducts($products);
+
+            $this->completeSyncLog('completed', $stats);
+
+            return $stats;
+        } catch (Exception $e) {
+            $this->completeSyncLog('failed', null, $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Sync products for a specific language (creates/updates products)
+     * Used for base language sync
+     */
+    private function syncProductsForLanguage($languageId)
+    {
+        $stockData = $this->vendorApi->getStock($languageId);
+
+        if (empty($stockData) || !isset($stockData['stock'])) {
+            throw new Exception('Invalid stock data received from vendor');
+        }
+
+        $products = $stockData['stock'];
+        $stats = [
+            'synced' => 0,
+            'added' => 0,
+            'updated' => 0,
+            'products' => []
+        ];
+
+        // Process each product
+        foreach ($products as $vendorProduct) {
+            try {
+                $this->syncSingleProduct($vendorProduct, $stats, $languageId);
+                $stats['products'][] = $vendorProduct;
+            } catch (Exception $e) {
+                $productId = $vendorProduct['sku'] ?? $vendorProduct['id'] ?? 'unknown';
+                error_log("Failed to sync product {$productId}: " . $e->getMessage());
+                continue;
+            }
+        }
+
+        return $stats;
+    }
+    
+    /**
+     * Sync translations for a specific language (updates only language columns)
+     * Used for non-base language sync
+     */
+    private function syncTranslationsForLanguage($languageId, $baseProducts)
+    {
+        $langCode = Language::getCodeFromId($languageId);
+        $stockData = $this->vendorApi->getStock($languageId);
+
+        if (empty($stockData) || !isset($stockData['stock'])) {
+            throw new Exception('Invalid stock data received from vendor');
+        }
+
+        $products = $stockData['stock'];
+        $stats = ['translated' => 0, 'skipped' => 0];
+
+        // Create SKU map for quick lookup
+        $productMap = [];
+        foreach ($products as $product) {
+            $sku = $product['sku'] ?? null;
+            if ($sku) {
+                $productMap[$sku] = $product;
+            }
+        }
+
+        // Update translations for existing products
+        foreach ($baseProducts as $baseProduct) {
+            $sku = $baseProduct['sku'] ?? null;
+            if (!$sku || !isset($productMap[$sku])) {
+                $stats['skipped']++;
+                continue;
+            }
+
+            $translatedProduct = $productMap[$sku];
+            
+            try {
+                // Get existing product from database
+                $existingProduct = $this->productModel->getByVendorArticleId($sku);
+                if (!$existingProduct) {
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                // Extract translated fields
+                $properties = $translatedProduct['properties'] ?? [];
+                $productName = $properties['full_name'] ?? ($translatedProduct['model'] ?? null);
+                $categoryName = $translatedProduct['cat_name'] ?? $translatedProduct['category'] ?? null;
+
+                // Update only language-specific columns
+                $updateData = [
+                    "name_{$langCode}" => $productName,
+                    "description_{$langCode}" => null, // Vendor doesn't provide description
+                ];
+
+                $this->productModel->update($existingProduct['id'], $updateData);
+                
+                // Update category translation if exists
+                if ($categoryName && $existingProduct['category_id']) {
+                    $this->updateCategoryTranslation($existingProduct['category_id'], $langCode, $categoryName);
+                }
+                
+                $stats['translated']++;
+            } catch (Exception $e) {
+                error_log("Failed to update translation for SKU {$sku} in {$langCode}: " . $e->getMessage());
+                $stats['skipped']++;
+            }
+        }
+
+        return $stats;
+    }
+    
+    /**
+     * Update category translation
+     */
+    private function updateCategoryTranslation($categoryId, $langCode, $name)
+    {
+        try {
+            $this->categoryModel->update($categoryId, [
+                "name_{$langCode}" => $name
+            ]);
+        } catch (Exception $e) {
+            error_log("Failed to update category translation: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Sync single product
+     */
+    private function syncSingleProduct($vendorProduct, &$stats, $languageId = 1)
+    {
+        // Normalize vendor data
+        $normalized = $this->normalizeVendorProduct($vendorProduct, $languageId);
+
+        // Extract images - TRIEL provides both 'images' array and single 'image' field
+        $productImages = [];
+        if (!empty($vendorProduct['images']) && is_array($vendorProduct['images'])) {
+            $productImages = $vendorProduct['images'];
+        } elseif (!empty($vendorProduct['image'])) {
+            $productImages = [$vendorProduct['image']];
+        }
+
+        // Check if product exists
+        $existingProduct = $this->productModel->getByVendorArticleId($normalized[':vendor_article_id']);
+
+        if ($existingProduct) {
+            // Update existing product
+            $this->productModel->update($existingProduct['id'], $normalized);
+            $stats['updated']++;
+            
+            // Update images
+            $this->syncProductImages($existingProduct['id'], $productImages);
+        } else {
+            // Create new product
+            $productId = $this->productModel->create($normalized);
+            $stats['added']++;
+            
+            // Add images
+            $this->syncProductImages($productId, $productImages);
+        }
+
+        $stats['synced']++;
+    }
+
+    /**
+     * Normalize vendor product data (TRIEL format)
+     * 
+     * @param array $vendorProduct Product data from vendor API
+     * @param int $languageId Language ID used for the API call
+     * @return array Normalized product data ready for database
+     */
+    private function normalizeVendorProduct($vendorProduct, $languageId = 1)
+    {
+        // TRIEL returns: name (brand), model (product), sku, price, in_stock, color, properties{}, category, cat_name
+        $properties = $vendorProduct['properties'] ?? [];
+        $langCode = Language::getCodeFromId($languageId);
+        
+        // Get or create brand (TRIEL 'name' field is the brand)
+        $brandId = null;
+        if (!empty($vendorProduct['name'])) {
+            $brandId = $this->getOrCreateBrand($vendorProduct['name']);
+        }
+
+        // Get or create category from 'cat_name' or 'category' field
+        $categoryId = null;
+        $categoryName = $vendorProduct['cat_name'] ?? $vendorProduct['category'] ?? null;
+        if (!empty($categoryName)) {
+            $categoryId = $this->getOrCreateCategory([
+                'id' => $vendorProduct['category'] ?? $categoryName,
+                'name' => $categoryName,
+                "name_{$langCode}" => $categoryName
+            ]);
+        }
+
+        // Warranty - extract from properties
+        $warrantyId = null;
+        if (!empty($properties['warranty'])) {
+            $warrantyId = $this->getOrCreateWarranty([
+                'name' => $properties['warranty'],
+                'months' => 12 // Default, can be parsed from warranty string
+            ]);
+        }
+
+        // Base price from vendor
+        $basePrice = floatval($vendorProduct['price'] ?? 0);
+
+        // Calculate customer price with markup
+        $customerPrice = $this->pricingService->calculatePrice($basePrice, $categoryId, $brandId);
+
+        // Product name - use full_name from properties, fallback to model field
+        $productName = $properties['full_name'] ?? ($vendorProduct['model'] ?? 'Unnamed Product');
+        
+        // Generate slug (only for English/base language)
+        $slug = ($languageId == 1) ? $this->generateSlug($productName) : null;
+
+        // Stock quantity
+        $stockQuantity = intval($vendorProduct['in_stock'] ?? 0);
+        
+        // Extract specs from properties and model name
+        $storage = $this->extractStorage($productName, $properties);
+        $ram = $this->extractRAM($productName, $properties);
+        $ean = $properties['ean'] ?? $vendorProduct['ean'] ?? null;
+
+        // Build data array with language-specific columns
+        $data = [
+            ':vendor_article_id' => $vendorProduct['sku'], // TRIEL uses 'sku' as unique ID
+            ':sku' => $vendorProduct['sku'],
+            ':ean' => $ean,
+            ':name' => $productName,
+            ':category_id' => $categoryId,
+            ':brand_id' => $brandId,
+            ':warranty_id' => $warrantyId,
+            ':base_price' => $basePrice,
+            ':price' => $customerPrice,
+            ':currency' => 'EUR',
+            ':stock_quantity' => $stockQuantity,
+            ':available_quantity' => $stockQuantity,
+            ':is_available' => $stockQuantity > 0 ? 1 : 0,
+            ':weight' => null,
+            ':dimensions' => null,
+            ':color' => $vendorProduct['color'] ?? null,
+            ':storage' => $storage,
+            ':ram' => $ram,
+            ':specifications' => !empty($properties) ? json_encode($properties) : null,
+            ':last_synced_at' => date('Y-m-d H:i:s')
+        ];
+        
+        // Add slug only for base language
+        if ($slug) {
+            $data[':slug'] = $slug;
+        }
+        
+        // Add language-specific name column
+        $data[":name_{$langCode}"] = $productName;
+        $data[":description_{$langCode}"] = null; // Vendor doesn't provide descriptions
+
+        return $data;
+    }
+
+    /**
+     * Get or create category
+     */
+    private function getOrCreateCategory($categoryData)
+    {
+        $vendorId = is_array($categoryData) ? ($categoryData['id'] ?? null) : $categoryData;
+        $name = is_array($categoryData) ? ($categoryData['name'] ?? 'Uncategorized') : $categoryData;
+
+        // Try to find existing category
+        if ($vendorId) {
+            $existing = $this->categoryModel->getByVendorId($vendorId);
+            if ($existing) {
+                // Update with new language data if provided
+                if (is_array($categoryData)) {
+                    $updateData = [];
+                    foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+                        if (isset($categoryData["name_{$lang}"])) {
+                            $updateData["name_{$lang}"] = $categoryData["name_{$lang}"];
+                        }
+                    }
+                    if (!empty($updateData)) {
+                        $this->categoryModel->update($existing['id'], $updateData);
+                    }
+                }
+                return $existing['id'];
+            }
+        }
+
+        // Create new category
+        $slug = $this->generateSlug($name);
+        $data = [
+            ':vendor_id' => $vendorId,
+            ':name' => $name,
+            ':slug' => $slug,
+            ':parent_id' => null,
+            ':description' => null,
+            ':image_url' => null,
+            ':sort_order' => 0,
+            ':is_active' => 1
+        ];
+        
+        // Add all language fields
+        foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+            $data[":name_{$lang}"] = is_array($categoryData) ? ($categoryData["name_{$lang}"] ?? null) : null;
+        }
+
+        return $this->categoryModel->create($data);
+    }
+
+    /**
+     * Get or create brand
+     */
+    private function getOrCreateBrand($brandData)
+    {
+        $vendorId = is_array($brandData) ? ($brandData['id'] ?? null) : $brandData;
+        $name = is_array($brandData) ? ($brandData['name'] ?? 'Unknown Brand') : $brandData;
+
+        // Try to find existing brand
+        if ($vendorId) {
+            $existing = $this->brandModel->getByVendorId($vendorId);
+            if ($existing) {
+                return $existing['id'];
+            }
+        }
+
+        // Create new brand
+        $slug = $this->generateSlug($name);
+        $data = [
+            ':vendor_id' => $vendorId,
+            ':name' => $name,
+            ':slug' => $slug,
+            ':logo_url' => is_array($brandData) ? ($brandData['logo'] ?? null) : null,
+            ':description' => null,
+            ':website' => null,
+            ':is_active' => 1
+        ];
+
+        return $this->brandModel->create($data);
+    }
+
+    /**
+     * Get or create warranty
+     */
+    private function getOrCreateWarranty($warrantyData)
+    {
+        $db = Database::getConnection();
+        
+        $name = is_array($warrantyData) ? ($warrantyData['name'] ?? 'Standard Warranty') : $warrantyData;
+        $months = is_array($warrantyData) ? ($warrantyData['months'] ?? 12) : 12;
+
+        // Try to find existing warranty
+        $sql = "SELECT id FROM warranties WHERE name = :name";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':name' => $name]);
+        $existing = $stmt->fetch();
+
+        if ($existing) {
+            return $existing['id'];
+        }
+
+        // Create new warranty
+        $sql = "INSERT INTO warranties (name, duration_months, description) VALUES (:name, :months, :description)";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([
+            ':name' => $name,
+            ':months' => $months,
+            ':description' => is_array($warrantyData) ? ($warrantyData['description'] ?? null) : null
+        ]);
+
+        return $db->lastInsertId();
+    }
+
+    /**
+     * Sync product images
+     */
+    private function syncProductImages($productId, $images)
+    {
+        // TRIEL returns images as array OR single image string
+        if (empty($images)) {
+            return;
+        }
+
+        // Convert single image to array
+        if (!is_array($images)) {
+            $images = [$images];
+        }
+
+        // Delete existing images
+        $db = Database::getConnection();
+        $sql = "DELETE FROM product_images WHERE product_id = :product_id";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':product_id' => $productId]);
+
+        // Add new images
+        foreach ($images as $index => $imageUrl) {
+            if (!empty($imageUrl)) {
+                $this->productModel->addImage(
+                    $productId,
+                    $imageUrl,
+                    null,
+                    $index === 0 // First image is primary
+                );
+            }
+        }
+    }
+
+    /**
+     * Extract storage capacity from product name
+     */
+    private function extractStorage($productName, $properties)
+    {
+        // Check properties first
+        if (!empty($properties['prod_storage'])) {
+            return $properties['prod_storage'];
+        }
+
+        // Extract from product name: "256GB", "1TB", "512 GB", etc.
+        if (preg_match('/(\d+)\s*(GB|TB)/i', $productName, $matches)) {
+            return $matches[1] . strtoupper($matches[2]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract RAM from product name
+     */
+    private function extractRAM($productName, $properties)
+    {
+        // Check properties first
+        if (!empty($properties['prod_memory']) || !empty($properties['ram'])) {
+            return $properties['prod_memory'] ?? $properties['ram'];
+        }
+
+        // Extract from product name if it contains RAM info
+        // Example: "8GB RAM", "16 GB", etc.
+        if (preg_match('/(\d+)\s*GB\s*(RAM|Memory)/i', $productName, $matches)) {
+            return $matches[1] . 'GB';
+        }
+
+        return null;
+    }
+
+    /**
+     * Disable products that are no longer available
+     */
+    private function disableUnavailableProducts($vendorProducts)
+    {
+        // TRIEL uses 'sku' as the unique identifier
+        $vendorIds = array_column($vendorProducts, 'sku');
+        
+        if (empty($vendorIds)) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($vendorIds), '?'));
+        $sql = "UPDATE products SET is_available = 0 
+                WHERE vendor_article_id NOT IN ($placeholders) 
+                AND is_available = 1";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($vendorIds);
+        
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Generate URL-friendly slug
+     */
+    private function generateSlug($text)
+    {
+        $text = preg_replace('~[^\pL\d]+~u', '-', $text);
+        $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
+        $text = preg_replace('~[^-\w]+~', '', $text);
+        $text = trim($text, '-');
+        $text = preg_replace('~-+~', '-', $text);
+        $text = strtolower($text);
+
+        if (empty($text)) {
+            return 'product-' . uniqid();
+        }
+
+        // Ensure uniqueness
+        $slug = $text;
+        $counter = 1;
+        
+        while ($this->slugExists($slug)) {
+            $slug = $text . '-' . $counter;
+            $counter++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Check if slug exists
+     */
+    private function slugExists($slug)
+    {
+        $sql = "SELECT COUNT(*) FROM products WHERE slug = :slug";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':slug' => $slug]);
+        return $stmt->fetchColumn() > 0;
+    }
+
+    /**
+     * Start sync log
+     */
+    private function startSyncLog()
+    {
+        $sql = "INSERT INTO vendor_sync_log (sync_type, status, started_at) 
+                VALUES ('full', 'in_progress', NOW())";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute();
+        $this->syncLogId = $this->db->lastInsertId();
+    }
+
+    /**
+     * Complete sync log
+     */
+    private function completeSyncLog($status, $stats = null, $error = null)
+    {
+        if (!$this->syncLogId) {
+            return;
+        }
+
+        $sql = "UPDATE vendor_sync_log SET 
+                status = :status,
+                products_synced = :synced,
+                products_added = :added,
+                products_updated = :updated,
+                products_disabled = :disabled,
+                error_message = :error,
+                completed_at = NOW(),
+                duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW())
+                WHERE id = :id";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id' => $this->syncLogId,
+            ':status' => $status,
+            ':synced' => $stats['synced'] ?? 0,
+            ':added' => $stats['added'] ?? 0,
+            ':updated' => $stats['updated'] ?? 0,
+            ':disabled' => $stats['disabled'] ?? 0,
+            ':error' => $error
+        ]);
+    }
+
+    /**
+     * Get last sync status
+     */
+    public function getLastSyncStatus()
+    {
+        $sql = "SELECT * FROM vendor_sync_log ORDER BY started_at DESC LIMIT 1";
+        $stmt = $this->db->query($sql);
+        return $stmt->fetch();
+    }
+}
+
