@@ -76,6 +76,13 @@ class Product
             $params[':warranty_id'] = $filters['warranty_id'];
         }
 
+        // Filter by product source (vendor or own)
+        // CRITICAL: This filter must work correctly to separate vendor and own products
+        if (isset($filters['product_source']) && $filters['product_source'] !== '' && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
+            $sql .= " AND product_source = :product_source";
+            $params[':product_source'] = $filters['product_source'];
+        }
+
         // Search query
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';
@@ -99,12 +106,21 @@ class Product
         // Pagination
         $sql .= " LIMIT :limit OFFSET :offset";
 
-        // Add pagination to params
-        $params[':limit'] = (int)$limit;
-        $params[':offset'] = (int)$offset;
-
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        
+        // Bind all filter parameters first
+        foreach ($params as $key => $value) {
+            // Skip limit and offset as they're bound separately
+            if ($key !== ':limit' && $key !== ':offset') {
+                $stmt->bindValue($key, $value);
+            }
+        }
+        
+        // Bind LIMIT and OFFSET with explicit type (required for PDO)
+        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+        
+        $stmt->execute();
 
         $products = $stmt->fetchAll();
 
@@ -131,6 +147,10 @@ class Product
         if (isset($filters['is_available'])) {
             $sql .= " AND is_available = :is_available";
             $params[':is_available'] = $filters['is_available'];
+        }
+        if (isset($filters['product_source']) && $filters['product_source'] !== '' && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
+            $sql .= " AND product_source = :product_source";
+            $params[':product_source'] = $filters['product_source'];
         }
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';

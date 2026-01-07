@@ -512,6 +512,11 @@ class ProductSyncService
     /**
      * Get or create category
      */
+    /**
+     * Get or create category
+     * NOTE: Categories used by in-house products (product_source = 'own') are protected
+     * and will never be deleted during sync. Only vendor categories are managed here.
+     */
     private function getOrCreateCategory($categoryData)
     {
         $vendorId = is_array($categoryData) ? ($categoryData['id'] ?? null) : $categoryData;
@@ -522,6 +527,7 @@ class ProductSyncService
             $existing = $this->categoryModel->getByVendorId($vendorId);
             if ($existing) {
                 // Update with new language data if provided
+                // NOTE: This only updates vendor categories, never touches in-house categories
                 if (is_array($categoryData)) {
                     $updateData = [];
                     foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
@@ -560,6 +566,8 @@ class ProductSyncService
 
     /**
      * Get or create brand
+     * NOTE: Brands used by in-house products (product_source = 'own') are protected
+     * and will never be deleted during sync. Only vendor brands are managed here.
      */
     private function getOrCreateBrand($brandData)
     {
@@ -570,6 +578,7 @@ class ProductSyncService
         if ($vendorId) {
             $existing = $this->brandModel->getByVendorId($vendorId);
             if ($existing) {
+                // NOTE: This only returns vendor brands, never touches in-house brands
                 return $existing['id'];
             }
         }

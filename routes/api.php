@@ -186,6 +186,7 @@ $router->put('admin/orders/{id}/status', 'AdminController', 'updateOrderStatus')
 
 // Admin Products
 $router->get('admin/products', 'AdminController', 'products');
+$router->post('admin/products', 'AdminController', 'createProduct');
 $router->put('admin/products/{id}', 'AdminController', 'updateProduct');
 
 // Admin Pricing
@@ -196,6 +197,18 @@ $router->put('admin/pricing/category/{id}', 'AdminController', 'updateCategoryMa
 // Admin Sync
 $router->post('admin/sync/products', 'AdminController', 'syncProducts');
 $router->get('admin/sync/status', 'AdminController', 'syncStatus');
+
+// Admin Categories
+$router->get('admin/categories', 'AdminController', 'getCategories');
+$router->post('admin/categories', 'AdminController', 'createCategory');
+$router->put('admin/categories/{id}', 'AdminController', 'updateCategory');
+$router->delete('admin/categories/{id}', 'AdminController', 'deleteCategory');
+
+// Admin Brands
+$router->get('admin/brands', 'AdminController', 'getBrands');
+$router->post('admin/brands', 'AdminController', 'createBrand');
+$router->put('admin/brands/{id}', 'AdminController', 'updateBrand');
+$router->delete('admin/brands/{id}', 'AdminController', 'deleteBrand');
 
 // Admin Vendor Orders
 $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSalesOrder');

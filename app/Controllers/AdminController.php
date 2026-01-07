@@ -7,7 +7,10 @@ require_once __DIR__ . '/../Services/ProductSyncService.php';
 require_once __DIR__ . '/../Services/PricingService.php';
 require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Models/Product.php';
+require_once __DIR__ . '/../Models/Category.php';
+require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Utils/Language.php';
+require_once __DIR__ . '/../Utils/Sanitizer.php';
 
 /**
  * Admin Controller
@@ -20,6 +23,8 @@ class AdminController
     private $orderService;
     private $orderModel;
     private $productModel;
+    private $categoryModel;
+    private $brandModel;
     private $productSyncService;
     private $pricingService;
     private $db;
@@ -31,6 +36,8 @@ class AdminController
         $this->orderService = new OrderService();
         $this->orderModel = new Order();
         $this->productModel = new Product();
+        $this->categoryModel = new Category();
+        $this->brandModel = new Brand();
         $this->productSyncService = new ProductSyncService();
         $this->pricingService = new PricingService();
         $this->db = Database::getConnection();
@@ -374,6 +381,10 @@ class AdminController
         if (!empty($_GET['search'])) {
             $filters['search'] = Sanitizer::string($_GET['search']);
         }
+        // Filter by product source - must be explicitly set and valid
+        if (!empty($_GET['product_source']) && in_array($_GET['product_source'], ['vendor', 'own'], true)) {
+            $filters['product_source'] = $_GET['product_source']; // Use raw value, already validated
+        }
 
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
@@ -387,6 +398,74 @@ class AdminController
                 'pages' => ceil($total / $limit)
             ]
         ]);
+    }
+
+    /**
+     * Create product (for in-house products)
+     */
+    public function createProduct()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        // Validate required fields
+        if (empty($input['name']) || empty($input['sku'])) {
+            Response::error('Name and SKU are required', 400);
+        }
+
+        try {
+            // Generate slug from name
+            $slug = $this->generateSlug($input['name']);
+            
+            // Prepare product data
+            $productData = [
+                ':product_source' => 'own',
+                ':vendor_article_id' => null,
+                ':sku' => Sanitizer::string($input['sku']),
+                ':ean' => $input['ean'] ?? null,
+                ':name' => Sanitizer::string($input['name']),
+                ':slug' => $slug,
+                ':description' => $input['description'] ?? null,
+                ':category_id' => !empty($input['category_id']) ? intval($input['category_id']) : null,
+                ':brand_id' => !empty($input['brand_id']) ? intval($input['brand_id']) : null,
+                ':warranty_id' => null,
+                ':base_price' => floatval($input['base_price'] ?? 0),
+                ':price' => floatval($input['price'] ?? 0),
+                ':currency' => 'EUR',
+                ':stock_quantity' => intval($input['stock_quantity'] ?? 0),
+                ':available_quantity' => intval($input['stock_quantity'] ?? 0),
+                ':reserved_quantity' => 0,
+                ':reorder_point' => 0,
+                ':warehouse_location' => $input['warehouse_location'] ?? null,
+                ':is_available' => isset($input['is_available']) ? ($input['is_available'] ? 1 : 0) : 1,
+                ':is_featured' => isset($input['is_featured']) ? ($input['is_featured'] ? 1 : 0) : 0,
+                ':weight' => null,
+                ':dimensions' => null,
+                ':color' => null,
+                ':storage' => null,
+                ':ram' => null,
+                ':specifications' => null,
+                ':last_synced_at' => null,
+            ];
+
+            // Initialize all language-specific fields to null for in-house products
+            foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+                $productData[":name_{$lang}"] = null;
+                $productData[":description_{$lang}"] = null;
+            }
+
+            $productId = $this->productModel->create($productData);
+            $product = $this->productModel->getById($productId);
+            
+            Response::success(['product' => $product], 'Product created successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to create product: ' . $e->getMessage(), 500);
+        }
     }
 
     /**
@@ -573,6 +652,249 @@ class AdminController
         } catch (Exception $e) {
             Response::error('Failed to create sales order: ' . $e->getMessage(), 500);
         }
+    }
+
+    /**
+     * Get all categories (admin)
+     */
+    public function getCategories()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        try {
+            $categories = $this->categoryModel->getAll('en');
+            Response::success(['categories' => $categories]);
+        } catch (Exception $e) {
+            Response::error('Failed to load categories: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Create category
+     */
+    public function createCategory()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (empty($input['name']) || empty($input['slug'])) {
+            Response::error('Name and slug are required', 400);
+        }
+
+        try {
+            $data = [
+                ':vendor_id' => null,
+                ':name' => Sanitizer::string($input['name']),
+                ':slug' => Sanitizer::string($input['slug']),
+                ':parent_id' => !empty($input['parent_id']) ? intval($input['parent_id']) : null,
+                ':description' => $input['description'] ?? null,
+                ':image_url' => null,
+                ':sort_order' => 0,
+                ':is_active' => 1,
+            ];
+
+            // Initialize all language fields
+            foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+                $data[":name_{$lang}"] = $input["name_{$lang}"] ?? ($lang === 'en' ? $input['name'] : null);
+            }
+
+            $categoryId = $this->categoryModel->create($data);
+            $category = $this->categoryModel->getById($categoryId);
+            
+            Response::success(['category' => $category], 'Category created successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to create category: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Update category
+     */
+    public function updateCategory($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        try {
+            $updateData = [];
+            if (isset($input['name'])) {
+                $updateData['name'] = Sanitizer::string($input['name']);
+            }
+            if (isset($input['slug'])) {
+                $updateData['slug'] = Sanitizer::string($input['slug']);
+            }
+            if (isset($input['description'])) {
+                $updateData['description'] = $input['description'];
+            }
+
+            if (empty($updateData)) {
+                Response::error('No valid fields to update', 400);
+            }
+
+            $this->categoryModel->update($id, $updateData);
+            $category = $this->categoryModel->getById($id);
+            
+            Response::success(['category' => $category], 'Category updated successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to update category: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Delete category (only if not used by in-house products)
+     */
+    public function deleteCategory($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+
+        try {
+            // Check if category is used by in-house products
+            $sql = "SELECT COUNT(*) FROM products WHERE category_id = :id AND product_source = 'own'";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $id]);
+            $ownProductCount = $stmt->fetchColumn();
+
+            if ($ownProductCount > 0) {
+                Response::error('Cannot delete category: it is used by ' . $ownProductCount . ' in-house product(s)', 400);
+            }
+
+            // Soft delete by setting is_active = 0
+            $this->categoryModel->update($id, ['is_active' => 0]);
+            
+            Response::success([], 'Category deleted successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to delete category: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get all brands (admin)
+     */
+    public function getBrands()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        try {
+            $brands = $this->brandModel->getAll('en');
+            Response::success(['brands' => $brands]);
+        } catch (Exception $e) {
+            Response::error('Failed to load brands: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Create brand
+     */
+    public function createBrand()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (empty($input['name']) || empty($input['slug'])) {
+            Response::error('Name and slug are required', 400);
+        }
+
+        try {
+            $data = [
+                ':vendor_id' => null,
+                ':name' => Sanitizer::string($input['name']),
+                ':slug' => Sanitizer::string($input['slug']),
+                ':logo_url' => $input['logo_url'] ?? null,
+                ':description' => $input['description'] ?? null,
+                ':website' => $input['website'] ?? null,
+                ':is_active' => 1,
+            ];
+
+            $brandId = $this->brandModel->create($data);
+            $brand = $this->brandModel->getById($brandId);
+            
+            Response::success(['brand' => $brand], 'Brand created successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to create brand: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Update brand
+     */
+    public function updateBrand($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        try {
+            $updateData = [];
+            if (isset($input['name'])) {
+                $updateData['name'] = Sanitizer::string($input['name']);
+            }
+            if (isset($input['slug'])) {
+                $updateData['slug'] = Sanitizer::string($input['slug']);
+            }
+            if (isset($input['description'])) {
+                $updateData['description'] = $input['description'];
+            }
+
+            if (empty($updateData)) {
+                Response::error('No valid fields to update', 400);
+            }
+
+            $this->brandModel->update($id, $updateData);
+            $brand = $this->brandModel->getById($id);
+            
+            Response::success(['brand' => $brand], 'Brand updated successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to update brand: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Delete brand (only if not used by in-house products)
+     */
+    public function deleteBrand($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+
+        try {
+            // Check if brand is used by in-house products
+            $sql = "SELECT COUNT(*) FROM products WHERE brand_id = :id AND product_source = 'own'";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => $id]);
+            $ownProductCount = $stmt->fetchColumn();
+
+            if ($ownProductCount > 0) {
+                Response::error('Cannot delete brand: it is used by ' . $ownProductCount . ' in-house product(s)', 400);
+            }
+
+            // Soft delete by setting is_active = 0
+            $this->brandModel->update($id, ['is_active' => 0]);
+            
+            Response::success([], 'Brand deleted successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to delete brand: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Generate slug from string
+     */
+    private function generateSlug($string)
+    {
+        $string = strtolower(trim($string));
+        $string = preg_replace('/[^a-z0-9-]/', '-', $string);
+        $string = preg_replace('/-+/', '-', $string);
+        return trim($string, '-');
     }
 }
 
