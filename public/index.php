@@ -18,6 +18,10 @@ if ($debug) {
     ini_set('display_errors', 0);
 }
 
+// Always log errors to file
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../storage/logs/php_errors.log');
+
 // Set timezone
 date_default_timezone_set(getenv('TIMEZONE') ?: 'Europe/Berlin');
 
