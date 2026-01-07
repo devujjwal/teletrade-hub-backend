@@ -285,6 +285,93 @@ class AdminController
     }
 
     /**
+     * Debug: Test admin login setup (temporary - no auth required)
+     */
+    public function testLoginSetup()
+    {
+        try {
+            $tests = [];
+            
+            // Test 1: Database connection
+            try {
+                $db = Database::getConnection();
+                $tests['database_connection'] = 'OK';
+            } catch (Exception $e) {
+                $tests['database_connection'] = 'FAILED: ' . $e->getMessage();
+            }
+            
+            // Test 2: admin_users table exists
+            try {
+                $stmt = $db->query("SHOW TABLES LIKE 'admin_users'");
+                $exists = $stmt->fetch();
+                $tests['admin_users_table'] = $exists ? 'EXISTS' : 'NOT FOUND';
+            } catch (Exception $e) {
+                $tests['admin_users_table'] = 'ERROR: ' . $e->getMessage();
+            }
+            
+            // Test 3: admin_sessions table exists
+            try {
+                $stmt = $db->query("SHOW TABLES LIKE 'admin_sessions'");
+                $exists = $stmt->fetch();
+                $tests['admin_sessions_table'] = $exists ? 'EXISTS' : 'NOT FOUND';
+            } catch (Exception $e) {
+                $tests['admin_sessions_table'] = 'ERROR: ' . $e->getMessage();
+            }
+            
+            // Test 4: Check if any admin users exist
+            try {
+                $stmt = $db->query("SELECT COUNT(*) as count FROM admin_users");
+                $result = $stmt->fetch();
+                $tests['admin_users_count'] = $result['count'] ?? 0;
+            } catch (Exception $e) {
+                $tests['admin_users_count'] = 'ERROR: ' . $e->getMessage();
+            }
+            
+            // Test 5: Check admin user with username 'admin'
+            try {
+                $stmt = $db->prepare("SELECT id, username, is_active FROM admin_users WHERE username = :username");
+                $stmt->execute([':username' => 'admin']);
+                $admin = $stmt->fetch();
+                $tests['admin_user_exists'] = $admin ? 'YES (ID: ' . $admin['id'] . ', Active: ' . $admin['is_active'] . ')' : 'NO';
+            } catch (Exception $e) {
+                $tests['admin_user_exists'] = 'ERROR: ' . $e->getMessage();
+            }
+            
+            // Test 6: AuthMiddleware instantiation
+            try {
+                $auth = new AuthMiddleware();
+                $tests['auth_middleware'] = 'OK';
+            } catch (Exception $e) {
+                $tests['auth_middleware'] = 'FAILED: ' . $e->getMessage();
+            }
+            
+            // Test 7: RateLimitMiddleware instantiation
+            try {
+                $rateLimiter = new RateLimitMiddleware();
+                $tests['rate_limiter'] = 'OK';
+            } catch (Exception $e) {
+                $tests['rate_limiter'] = 'FAILED: ' . $e->getMessage();
+            }
+            
+            // Test 8: Env class
+            try {
+                $tokenExpiry = Env::get('ADMIN_TOKEN_EXPIRY', 86400);
+                $tests['env_class'] = 'OK (TOKEN_EXPIRY: ' . $tokenExpiry . ')';
+            } catch (Exception $e) {
+                $tests['env_class'] = 'FAILED: ' . $e->getMessage();
+            }
+            
+            Response::success([
+                'tests' => $tests,
+                'php_version' => phpversion(),
+                'server_time' => date('Y-m-d H:i:s')
+            ]);
+        } catch (Exception $e) {
+            Response::error('Test failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine(), 500);
+        }
+    }
+
+    /**
      * Admin login
      */
     public function login()
