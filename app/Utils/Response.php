@@ -8,28 +8,38 @@ class Response
 {
     /**
      * Send JSON success response
+     * SECURITY: JSON encoding options prevent XSS
      */
     public static function success($data = null, $message = 'Success', $statusCode = 200)
     {
         http_response_code($statusCode);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
         
+        // SECURITY: JSON_HEX_* options prevent XSS in JSON responses
         echo json_encode([
             'success' => true,
             'message' => $message,
             'data' => $data
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
         
         exit;
     }
 
     /**
      * Send JSON error response
+     * SECURITY: Sanitize error messages in production
      */
     public static function error($message = 'Error occurred', $statusCode = 400, $errors = null)
     {
         http_response_code($statusCode);
-        header('Content-Type: application/json');
+        header('Content-Type: application/json; charset=utf-8');
+        
+        // SECURITY: In production, sanitize error messages to prevent info disclosure
+        $isProduction = Env::get('APP_ENV') !== 'development';
+        if ($isProduction && $statusCode >= 500) {
+            $message = 'An internal error occurred. Please contact support.';
+            $errors = null; // Don't expose error details in production
+        }
         
         $response = [
             'success' => false,
@@ -40,7 +50,8 @@ class Response
             $response['errors'] = $errors;
         }
         
-        echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // SECURITY: JSON_HEX_* options prevent XSS in JSON responses
+        echo json_encode($response, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE);
         
         exit;
     }
@@ -77,29 +88,5 @@ class Response
         self::error($message, 500);
     }
 
-    /**
-     * Set CORS headers
-     */
-    public static function setCorsHeaders()
-    {
-        $allowedOrigins = explode(',', Env::get('CORS_ALLOWED_ORIGINS', '*'));
-        
-        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-        
-        if (in_array('*', $allowedOrigins) || in_array($origin, $allowedOrigins)) {
-            header("Access-Control-Allow-Origin: " . ($origin ?: '*'));
-        }
-        
-        header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-        header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-        header("Access-Control-Allow-Credentials: true");
-        header("Access-Control-Max-Age: 86400");
-        
-        // Handle preflight requests
-        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-            http_response_code(200);
-            exit;
-        }
-    }
 }
 
