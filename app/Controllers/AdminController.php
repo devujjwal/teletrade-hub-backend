@@ -398,7 +398,7 @@ class AdminController
             
             error_log("Step 3: Enforcing rate limit");
             $this->rateLimiter->enforce($clientIp, 'admin_login', 3, 900); // 3 attempts per 15 minutes
-            error_log("Rate limit OK")
+            error_log("Rate limit OK");
 
             error_log("Step 4: Validating input");
             // Validate input
