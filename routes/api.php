@@ -197,5 +197,9 @@ $router->get('admin/sync/status', 'AdminController', 'syncStatus');
 // Admin Vendor Orders
 $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSalesOrder');
 
+// Debug Routes (Temporary - Remove in production)
+$router->get('admin/debug/database', 'AdminController', 'debugDatabase');
+$router->get('admin/debug/vendor-api', 'AdminController', 'debugVendorApi');
+
 return $router;
 

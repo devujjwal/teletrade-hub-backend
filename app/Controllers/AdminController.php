@@ -36,6 +36,122 @@ class AdminController
     }
 
     /**
+     * Debug: Get database diagnostics (temporary - no auth required)
+     */
+    public function debugDatabase()
+    {
+        // Simple key protection
+        $key = $_GET['key'] ?? '';
+        if ($key !== 'SECURE_KEY_12345') {
+            Response::error('Unauthorized', 401);
+        }
+
+        try {
+            $stats = [
+                'products_count' => $this->db->query("SELECT COUNT(*) FROM products")->fetchColumn(),
+                'brands_count' => $this->db->query("SELECT COUNT(*) FROM brands")->fetchColumn(),
+                'categories_count' => $this->db->query("SELECT COUNT(*) FROM categories")->fetchColumn(),
+                'available_products' => $this->db->query("SELECT COUNT(*) FROM products WHERE is_available = 1")->fetchColumn(),
+            ];
+
+            // Sample products
+            $stmt = $this->db->query("SELECT id, sku, name, name_en, brand_id, category_id, price, stock_quantity, is_available FROM products LIMIT 10");
+            $sampleProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Sample brands
+            $stmt = $this->db->query("SELECT id, name, vendor_id FROM brands LIMIT 10");
+            $sampleBrands = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Sample categories
+            $stmt = $this->db->query("SELECT id, name, vendor_id FROM categories LIMIT 10");
+            $sampleCategories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Search tests
+            $searchTests = [];
+            $searchTerms = ['iPhone', 'Samsung', 'phone', 'mobile'];
+            foreach ($searchTerms as $term) {
+                $stmt = $this->db->prepare("SELECT COUNT(*) FROM products WHERE name LIKE :search OR sku LIKE :search");
+                $stmt->execute([':search' => "%$term%"]);
+                $searchTests[$term] = $stmt->fetchColumn();
+            }
+
+            // Data quality check
+            $dataQuality = [
+                'null_names' => $this->db->query("SELECT COUNT(*) FROM products WHERE name IS NULL OR name = ''")->fetchColumn(),
+                'null_categories' => $this->db->query("SELECT COUNT(*) FROM products WHERE category_id IS NULL")->fetchColumn(),
+                'null_brands' => $this->db->query("SELECT COUNT(*) FROM products WHERE brand_id IS NULL")->fetchColumn(),
+                'zero_price' => $this->db->query("SELECT COUNT(*) FROM products WHERE price = 0")->fetchColumn(),
+            ];
+
+            // Latest sync log
+            $stmt = $this->db->query("SELECT * FROM vendor_sync_log ORDER BY started_at DESC LIMIT 1");
+            $lastSync = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            Response::success([
+                'statistics' => $stats,
+                'sample_products' => $sampleProducts,
+                'sample_brands' => $sampleBrands,
+                'sample_categories' => $sampleCategories,
+                'search_tests' => $searchTests,
+                'data_quality' => $dataQuality,
+                'last_sync' => $lastSync
+            ]);
+        } catch (Exception $e) {
+            Response::serverError('Database error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Debug: Check TRIEL API response (temporary - no auth required)
+     */
+    public function debugVendorApi()
+    {
+        // Simple key protection
+        $key = $_GET['key'] ?? '';
+        if ($key !== 'SECURE_KEY_12345') {
+            Response::error('Unauthorized', 401);
+        }
+
+        try {
+            require_once __DIR__ . '/../Services/VendorApiService.php';
+            $vendorApi = new VendorApiService();
+            
+            $stockData = $vendorApi->getStock('en');
+            
+            $analysis = [
+                'top_level_keys' => array_keys($stockData),
+                'has_stock_key' => isset($stockData['stock']),
+                'has_products_key' => isset($stockData['products']),
+                'has_items_key' => isset($stockData['items']),
+            ];
+
+            // Get first product structure
+            $firstProduct = null;
+            if (isset($stockData['stock']) && !empty($stockData['stock'])) {
+                $firstProduct = $stockData['stock'][0];
+                $analysis['first_product_keys'] = array_keys($firstProduct);
+            } elseif (isset($stockData['products']) && !empty($stockData['products'])) {
+                $firstProduct = $stockData['products'][0];
+                $analysis['first_product_keys'] = array_keys($firstProduct);
+            } elseif (isset($stockData['items']) && !empty($stockData['items'])) {
+                $firstProduct = $stockData['items'][0];
+                $analysis['first_product_keys'] = array_keys($firstProduct);
+            } elseif (isset($stockData[0])) {
+                $firstProduct = $stockData[0];
+                $analysis['first_product_keys'] = array_keys($firstProduct);
+            }
+
+            Response::success([
+                'analysis' => $analysis,
+                'first_product_sample' => $firstProduct,
+                'total_products_received' => is_array($stockData) ? count($stockData) : 0
+            ]);
+        } catch (Exception $e) {
+            Response::serverError('Vendor API error: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Admin login
      */
     public function login()
