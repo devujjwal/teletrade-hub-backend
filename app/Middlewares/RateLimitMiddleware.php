@@ -13,6 +13,17 @@ class RateLimitMiddleware
     {
         $this->db = Database::getConnection();
         $this->cacheFile = __DIR__ . '/../../storage/rate_limit_cache.json';
+        
+        // Ensure storage directory exists
+        $storageDir = dirname($this->cacheFile);
+        if (!is_dir($storageDir)) {
+            @mkdir($storageDir, 0755, true);
+        }
+        
+        // Ensure cache file exists
+        if (!file_exists($this->cacheFile)) {
+            @file_put_contents($this->cacheFile, json_encode([]));
+        }
     }
     
     /**
@@ -108,14 +119,24 @@ class RateLimitMiddleware
      */
     private function loadCache()
     {
-        if (!file_exists($this->cacheFile)) {
+        try {
+            if (!file_exists($this->cacheFile)) {
+                return [];
+            }
+            
+            $content = @file_get_contents($this->cacheFile);
+            if ($content === false) {
+                return [];
+            }
+            
+            $cache = json_decode($content, true);
+            
+            return is_array($cache) ? $cache : [];
+        } catch (Exception $e) {
+            // Silently fail and return empty cache
+            error_log("Rate limit cache load failed: " . $e->getMessage());
             return [];
         }
-        
-        $content = file_get_contents($this->cacheFile);
-        $cache = json_decode($content, true);
-        
-        return is_array($cache) ? $cache : [];
     }
     
     /**
@@ -123,12 +144,17 @@ class RateLimitMiddleware
      */
     private function saveCache($cache)
     {
-        $dir = dirname($this->cacheFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        try {
+            $dir = dirname($this->cacheFile);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+            }
+            
+            @file_put_contents($this->cacheFile, json_encode($cache), LOCK_EX);
+        } catch (Exception $e) {
+            // Silently fail - rate limiting is not critical for functionality
+            error_log("Rate limit cache save failed: " . $e->getMessage());
         }
-        
-        file_put_contents($this->cacheFile, json_encode($cache), LOCK_EX);
     }
     
     /**
