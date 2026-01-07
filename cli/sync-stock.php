@@ -18,10 +18,17 @@ ini_set('log_errors', 1);
 // Determine base path - works from both cli/ and public/cli/
 $basePath = __DIR__;
 if (basename($basePath) === 'cli') {
-    // Script is in cli/ at root level
-    $basePath = dirname($basePath);
+    // Check if we're in public/cli/ or cli/ at root
+    $parentDir = dirname($basePath);
+    if (basename($parentDir) === 'public') {
+        // We're in public/cli/ - go up two levels to root
+        $basePath = dirname($parentDir);
+    } else {
+        // We're in cli/ at root level - go up one level
+        $basePath = $parentDir;
+    }
 } else {
-    // Script might be in public/cli/ - go up two levels
+    // Unexpected location - try going up two levels
     $basePath = dirname(dirname($basePath));
 }
 
