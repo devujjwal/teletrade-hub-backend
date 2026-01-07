@@ -25,9 +25,13 @@ date_default_timezone_set(getenv('TIMEZONE') ?: 'Europe/Berlin');
 require_once __DIR__ . '/../app/Config/env.php';
 Env::load();
 
+// Apply security headers
+require_once __DIR__ . '/../app/Middlewares/SecurityHeadersMiddleware.php';
+SecurityHeadersMiddleware::apply();
+
 // Set CORS headers
 require_once __DIR__ . '/../app/Utils/Response.php';
-Response::setCorsHeaders();
+SecurityHeadersMiddleware::setCorsHeaders();
 
 // Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
