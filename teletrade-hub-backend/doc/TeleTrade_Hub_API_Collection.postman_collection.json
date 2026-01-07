@@ -211,14 +211,14 @@
 					"response": []
 				},
 				{
-					"name": "Get Product by ID",
+					"name": "Get Product by Slug",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/products/1?lang=en",
+							"raw": "{{base_url}}/products/iphone-15-pro?lang=en",
 							"host": ["{{base_url}}"],
-							"path": ["products", "1"],
+							"path": ["products", "iphone-15-pro"],
 							"query": [
 								{
 									"key": "lang",
@@ -227,7 +227,7 @@
 								}
 							]
 						},
-						"description": "Get single product details by ID"
+						"description": "Get single product details by slug (SEO-friendly URL)"
 					},
 					"response": []
 				},
@@ -300,9 +300,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/categories/1/products?page=1&limit=20&lang=en",
+							"raw": "{{base_url}}/categories/smartphones/products?page=1&limit=20&lang=en",
 							"host": ["{{base_url}}"],
-							"path": ["categories", "1", "products"],
+							"path": ["categories", "smartphones", "products"],
 							"query": [
 								{
 									"key": "page",
@@ -321,7 +321,7 @@
 								}
 							]
 						},
-						"description": "Get products by category ID"
+						"description": "Get products by category slug (SEO-friendly URL)"
 					},
 					"response": []
 				}
@@ -351,9 +351,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/brands/1/products?page=1&limit=20&lang=en",
+							"raw": "{{base_url}}/brands/apple/products?page=1&limit=20&lang=en",
 							"host": ["{{base_url}}"],
-							"path": ["brands", "1", "products"],
+							"path": ["brands", "apple", "products"],
 							"query": [
 								{
 									"key": "page",
@@ -372,7 +372,7 @@
 								}
 							]
 						},
-						"description": "Get products by brand ID"
+						"description": "Get products by brand slug (SEO-friendly URL)"
 					},
 					"response": []
 				}

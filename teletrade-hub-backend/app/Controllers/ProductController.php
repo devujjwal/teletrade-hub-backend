@@ -98,12 +98,12 @@ class ProductController
     }
 
     /**
-     * Get single product
+     * Get single product by slug
      */
-    public function show($id)
+    public function show($slug)
     {
         $lang = LanguageMiddleware::getCurrentLanguage();
-        $product = $this->productModel->getById($id, $lang);
+        $product = $this->productModel->getBySlug($slug, $lang);
 
         if (!$product) {
             Response::notFound('Product not found');
@@ -189,20 +189,20 @@ class ProductController
     }
 
     /**
-     * Get products by category
+     * Get products by category slug
      */
-    public function productsByCategory($categoryId)
+    public function productsByCategory($categorySlug)
     {
         $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
-        $category = $this->categoryModel->getById($categoryId, $lang);
+        $category = $this->categoryModel->getBySlug($categorySlug, $lang);
         if (!$category) {
             Response::notFound('Category not found');
         }
 
-        $filters = ['category_id' => $categoryId, 'is_available' => 1];
+        $filters = ['category_id' => $category['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
 
@@ -233,20 +233,20 @@ class ProductController
     }
 
     /**
-     * Get products by brand
+     * Get products by brand slug
      */
-    public function productsByBrand($brandId)
+    public function productsByBrand($brandSlug)
     {
         $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
-        $brand = $this->brandModel->getById($brandId);
+        $brand = $this->brandModel->getBySlug($brandSlug);
         if (!$brand) {
             Response::notFound('Brand not found');
         }
 
-        $filters = ['brand_id' => $brandId, 'is_available' => 1];
+        $filters = ['brand_id' => $brand['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
 

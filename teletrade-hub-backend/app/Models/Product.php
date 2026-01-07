@@ -166,6 +166,26 @@ class Product
     }
 
     /**
+     * Get product by slug
+     */
+    public function getBySlug($slug, $lang = 'en')
+    {
+        $sql = "SELECT * FROM product_list_view WHERE slug = :slug";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':slug' => $slug]);
+        $product = $stmt->fetch();
+
+        if (!$product) {
+            return null;
+        }
+
+        // Get all images
+        $product['images'] = $this->getImages($product['id']);
+
+        return $this->applyLanguage([$product], $lang)[0];
+    }
+
+    /**
      * Get product by vendor article ID
      */
     public function getByVendorArticleId($vendorArticleId)
