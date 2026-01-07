@@ -47,44 +47,46 @@ class AdminController
         }
 
         try {
+            $db = Database::getConnection();
+            
             $stats = [
-                'products_count' => $this->db->query("SELECT COUNT(*) FROM products")->fetchColumn(),
-                'brands_count' => $this->db->query("SELECT COUNT(*) FROM brands")->fetchColumn(),
-                'categories_count' => $this->db->query("SELECT COUNT(*) FROM categories")->fetchColumn(),
-                'available_products' => $this->db->query("SELECT COUNT(*) FROM products WHERE is_available = 1")->fetchColumn(),
+                'products_count' => $db->query("SELECT COUNT(*) FROM products")->fetchColumn(),
+                'brands_count' => $db->query("SELECT COUNT(*) FROM brands")->fetchColumn(),
+                'categories_count' => $db->query("SELECT COUNT(*) FROM categories")->fetchColumn(),
+                'available_products' => $db->query("SELECT COUNT(*) FROM products WHERE is_available = 1")->fetchColumn(),
             ];
 
             // Sample products
-            $stmt = $this->db->query("SELECT id, sku, name, name_en, brand_id, category_id, price, stock_quantity, is_available FROM products LIMIT 10");
+            $stmt = $db->query("SELECT id, sku, name, name_en, brand_id, category_id, price, stock_quantity, is_available FROM products LIMIT 10");
             $sampleProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Sample brands
-            $stmt = $this->db->query("SELECT id, name, vendor_id FROM brands LIMIT 10");
+            $stmt = $db->query("SELECT id, name, vendor_id FROM brands LIMIT 10");
             $sampleBrands = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Sample categories
-            $stmt = $this->db->query("SELECT id, name, vendor_id FROM categories LIMIT 10");
+            $stmt = $db->query("SELECT id, name, vendor_id FROM categories LIMIT 10");
             $sampleCategories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Search tests
             $searchTests = [];
-            $searchTerms = ['iPhone', 'Samsung', 'phone', 'mobile'];
+            $searchTerms = ['iPhone', 'Samsung', 'phone', 'mobile', 'Apple'];
             foreach ($searchTerms as $term) {
-                $stmt = $this->db->prepare("SELECT COUNT(*) FROM products WHERE name LIKE :search OR sku LIKE :search");
+                $stmt = $db->prepare("SELECT COUNT(*) FROM products WHERE name LIKE :search OR sku LIKE :search");
                 $stmt->execute([':search' => "%$term%"]);
                 $searchTests[$term] = $stmt->fetchColumn();
             }
 
             // Data quality check
             $dataQuality = [
-                'null_names' => $this->db->query("SELECT COUNT(*) FROM products WHERE name IS NULL OR name = ''")->fetchColumn(),
-                'null_categories' => $this->db->query("SELECT COUNT(*) FROM products WHERE category_id IS NULL")->fetchColumn(),
-                'null_brands' => $this->db->query("SELECT COUNT(*) FROM products WHERE brand_id IS NULL")->fetchColumn(),
-                'zero_price' => $this->db->query("SELECT COUNT(*) FROM products WHERE price = 0")->fetchColumn(),
+                'null_names' => $db->query("SELECT COUNT(*) FROM products WHERE name IS NULL OR name = ''")->fetchColumn(),
+                'null_categories' => $db->query("SELECT COUNT(*) FROM products WHERE category_id IS NULL")->fetchColumn(),
+                'null_brands' => $db->query("SELECT COUNT(*) FROM products WHERE brand_id IS NULL")->fetchColumn(),
+                'zero_price' => $db->query("SELECT COUNT(*) FROM products WHERE price = 0")->fetchColumn(),
             ];
 
             // Latest sync log
-            $stmt = $this->db->query("SELECT * FROM vendor_sync_log ORDER BY started_at DESC LIMIT 1");
+            $stmt = $db->query("SELECT * FROM vendor_sync_log ORDER BY started_at DESC LIMIT 1");
             $lastSync = $stmt->fetch(PDO::FETCH_ASSOC);
 
             Response::success([

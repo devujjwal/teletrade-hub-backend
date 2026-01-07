@@ -84,8 +84,16 @@ class ProductSyncService
         // Normalize vendor data
         $normalized = $this->normalizeVendorProduct($vendorProduct);
 
+        // Extract images - TRIEL provides both 'images' array and single 'image' field
+        $productImages = [];
+        if (!empty($vendorProduct['images']) && is_array($vendorProduct['images'])) {
+            $productImages = $vendorProduct['images'];
+        } elseif (!empty($vendorProduct['image'])) {
+            $productImages = [$vendorProduct['image']];
+        }
+
         // Check if product exists
-        $existingProduct = $this->productModel->getByVendorArticleId($normalized['vendor_article_id']);
+        $existingProduct = $this->productModel->getByVendorArticleId($normalized[':vendor_article_id']);
 
         if ($existingProduct) {
             // Update existing product
@@ -93,14 +101,14 @@ class ProductSyncService
             $stats['updated']++;
             
             // Update images
-            $this->syncProductImages($existingProduct['id'], $vendorProduct['images'] ?? []);
+            $this->syncProductImages($existingProduct['id'], $productImages);
         } else {
             // Create new product
             $productId = $this->productModel->create($normalized);
             $stats['added']++;
             
             // Add images
-            $this->syncProductImages($productId, $vendorProduct['images'] ?? []);
+            $this->syncProductImages($productId, $productImages);
         }
 
         $stats['synced']++;
@@ -111,7 +119,7 @@ class ProductSyncService
      */
     private function normalizeVendorProduct($vendorProduct)
     {
-        // TRIEL returns: name (brand), model (product), sku, price, in_stock, color, properties{}
+        // TRIEL returns: name (brand), model (product), sku, price, in_stock, color, properties{}, category, cat_name
         $properties = $vendorProduct['properties'] ?? [];
         
         // Get or create brand (TRIEL 'name' field is the brand)
@@ -120,11 +128,25 @@ class ProductSyncService
             $brandId = $this->getOrCreateBrand($vendorProduct['name']);
         }
 
-        // Category - can be derived from properties or set later
+        // Get or create category from 'cat_name' or 'category' field
         $categoryId = null;
+        $categoryName = $vendorProduct['cat_name'] ?? $vendorProduct['category'] ?? null;
+        if (!empty($categoryName)) {
+            $categoryId = $this->getOrCreateCategory([
+                'id' => $vendorProduct['category'] ?? $categoryName,
+                'name' => $categoryName,
+                'name_en' => $categoryName
+            ]);
+        }
 
-        // Warranty - can be derived from properties or set default
+        // Warranty - extract from properties
         $warrantyId = null;
+        if (!empty($properties['warranty'])) {
+            $warrantyId = $this->getOrCreateWarranty([
+                'name' => $properties['warranty'],
+                'months' => 12 // Default, can be parsed from warranty string
+            ]);
+        }
 
         // Base price from vendor
         $basePrice = floatval($vendorProduct['price'] ?? 0);
@@ -132,7 +154,7 @@ class ProductSyncService
         // Calculate customer price with markup
         $customerPrice = $this->pricingService->calculatePrice($basePrice, $categoryId, $brandId);
 
-        // Product name is the 'model' field, or use full_name from properties
+        // Product name - use full_name from properties, fallback to model field
         $productName = $properties['full_name'] ?? ($vendorProduct['model'] ?? 'Unnamed Product');
         
         // Generate slug
@@ -141,10 +163,10 @@ class ProductSyncService
         // Stock quantity
         $stockQuantity = intval($vendorProduct['in_stock'] ?? 0);
         
-        // Extract specs from properties
-        $storage = $properties['prod_storage'] ?? null;
-        $ram = $properties['prod_memory'] ?? null;
-        $ean = $properties['ean'] ?? null;
+        // Extract specs from properties and model name
+        $storage = $this->extractStorage($productName, $properties);
+        $ram = $this->extractRAM($productName, $properties);
+        $ean = $properties['ean'] ?? $vendorProduct['ean'] ?? null;
 
         return [
             ':vendor_article_id' => $vendorProduct['sku'], // TRIEL uses 'sku' as unique ID
@@ -281,8 +303,14 @@ class ProductSyncService
      */
     private function syncProductImages($productId, $images)
     {
+        // TRIEL returns images as array OR single image string
         if (empty($images)) {
             return;
+        }
+
+        // Convert single image to array
+        if (!is_array($images)) {
+            $images = [$images];
         }
 
         // Delete existing images
@@ -293,13 +321,52 @@ class ProductSyncService
 
         // Add new images
         foreach ($images as $index => $imageUrl) {
-            $this->productModel->addImage(
-                $productId,
-                $imageUrl,
-                null,
-                $index === 0 // First image is primary
-            );
+            if (!empty($imageUrl)) {
+                $this->productModel->addImage(
+                    $productId,
+                    $imageUrl,
+                    null,
+                    $index === 0 // First image is primary
+                );
+            }
         }
+    }
+
+    /**
+     * Extract storage capacity from product name
+     */
+    private function extractStorage($productName, $properties)
+    {
+        // Check properties first
+        if (!empty($properties['prod_storage'])) {
+            return $properties['prod_storage'];
+        }
+
+        // Extract from product name: "256GB", "1TB", "512 GB", etc.
+        if (preg_match('/(\d+)\s*(GB|TB)/i', $productName, $matches)) {
+            return $matches[1] . strtoupper($matches[2]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract RAM from product name
+     */
+    private function extractRAM($productName, $properties)
+    {
+        // Check properties first
+        if (!empty($properties['prod_memory']) || !empty($properties['ram'])) {
+            return $properties['prod_memory'] ?? $properties['ram'];
+        }
+
+        // Extract from product name if it contains RAM info
+        // Example: "8GB RAM", "16 GB", etc.
+        if (preg_match('/(\d+)\s*GB\s*(RAM|Memory)/i', $productName, $matches)) {
+            return $matches[1] . 'GB';
+        }
+
+        return null;
     }
 
     /**
