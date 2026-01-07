@@ -36,18 +36,23 @@ class AdminController
 
     public function __construct()
     {
-        $this->authMiddleware = new AuthMiddleware();
-        $this->rateLimiter = new RateLimitMiddleware();
-        $this->orderService = new OrderService();
-        $this->orderModel = new Order();
-        $this->productModel = new Product();
-        $this->categoryModel = new Category();
-        $this->brandModel = new Brand();
-        // Settings model is lazy-loaded to avoid errors during login
-        $this->settingsModel = null;
-        $this->productSyncService = new ProductSyncService();
-        $this->pricingService = new PricingService();
-        $this->db = Database::getConnection();
+        try {
+            $this->authMiddleware = new AuthMiddleware();
+            $this->rateLimiter = new RateLimitMiddleware();
+            // Models and services are lazy-loaded to avoid errors during login
+            $this->orderService = null;
+            $this->orderModel = null;
+            $this->productModel = null;
+            $this->categoryModel = null;
+            $this->brandModel = null;
+            $this->settingsModel = null;
+            $this->productSyncService = null;
+            $this->pricingService = null;
+            $this->db = Database::getConnection();
+        } catch (Exception $e) {
+            error_log("AdminController constructor error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            throw $e;
+        }
     }
 
     /**
@@ -59,6 +64,83 @@ class AdminController
             $this->settingsModel = new Settings();
         }
         return $this->settingsModel;
+    }
+
+    /**
+     * Get order service instance (lazy-loaded)
+     */
+    private function getOrderService()
+    {
+        if ($this->orderService === null) {
+            $this->orderService = new OrderService();
+        }
+        return $this->orderService;
+    }
+
+    /**
+     * Get order model instance (lazy-loaded)
+     */
+    private function getOrderModel()
+    {
+        if ($this->orderModel === null) {
+            $this->orderModel = new Order();
+        }
+        return $this->orderModel;
+    }
+
+    /**
+     * Get product model instance (lazy-loaded)
+     */
+    private function getProductModel()
+    {
+        if ($this->productModel === null) {
+            $this->productModel = new Product();
+        }
+        return $this->productModel;
+    }
+
+    /**
+     * Get category model instance (lazy-loaded)
+     */
+    private function getCategoryModel()
+    {
+        if ($this->categoryModel === null) {
+            $this->categoryModel = new Category();
+        }
+        return $this->categoryModel;
+    }
+
+    /**
+     * Get brand model instance (lazy-loaded)
+     */
+    private function getBrandModel()
+    {
+        if ($this->brandModel === null) {
+            $this->brandModel = new Brand();
+        }
+        return $this->brandModel;
+    }
+
+    /**
+     * Get product sync service instance (lazy-loaded)
+     */
+    private function getProductSyncService()
+    {
+        if ($this->productSyncService === null) {
+            $this->productSyncService = new ProductSyncService();
+        }
+        return $this->productSyncService;
+    }
+
+    /**
+     * Get pricing service instance (lazy-loaded)
+     */
+    private function getPricingService()
+    {
+        if ($this->pricingService === null) {
+            $this->pricingService = new PricingService();
+        }
+        return $this->pricingService;
     }
 
     /**
@@ -276,7 +358,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
 
         try {
-            $stats = $this->orderModel->getStatistics();
+            $stats = $this->getOrderModel()->getStatistics();
             
             // Get product stats
             $productStats = $this->db->query("
@@ -288,7 +370,7 @@ class AdminController
             ")->fetch();
 
             // Recent orders
-            $recentOrders = $this->orderModel->getAll([], 1, 10);
+            $recentOrders = $this->getOrderModel()->getAll([], 1, 10);
 
             Response::success([
                 'order_stats' => $stats,
@@ -321,8 +403,8 @@ class AdminController
             $filters['search'] = Sanitizer::string($_GET['search']);
         }
 
-        $orders = $this->orderModel->getAll($filters, $page, $limit);
-        $total = $this->orderModel->count($filters);
+        $orders = $this->getOrderModel()->getAll($filters, $page, $limit);
+        $total = $this->getOrderModel()->count($filters);
 
         Response::success([
             'orders' => $orders,
@@ -343,7 +425,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
 
         // Admin gets full details including product_source, fulfillment_status, etc.
-        $order = $this->orderService->getOrderDetails($id, true);
+        $order = $this->getOrderService()->getOrderDetails($id, true);
         
         if (!$order) {
             Response::notFound('Order not found');
@@ -371,10 +453,10 @@ class AdminController
         }
 
         try {
-            $this->orderModel->updateStatus($id, $input['status']);
+            $this->getOrderModel()->updateStatus($id, $input['status']);
             
             // Admin gets full order details
-            $order = $this->orderService->getOrderDetails($id, true);
+            $order = $this->getOrderService()->getOrderDetails($id, true);
             Response::success(['order' => $order], 'Order status updated');
         } catch (Exception $e) {
             Response::error('Failed to update order: ' . $e->getMessage(), 500);
@@ -422,8 +504,8 @@ class AdminController
             $filters['is_featured'] = ($_GET['is_featured'] === '1' || $_GET['is_featured'] === 1) ? 1 : 0;
         }
 
-        $products = $this->productModel->getAll($filters, $page, $limit, $lang);
-        $total = $this->productModel->count($filters);
+        $products = $this->getProductModel()->getAll($filters, $page, $limit, $lang);
+        $total = $this->getProductModel()->count($filters);
 
         Response::success([
             'products' => $products,
@@ -495,8 +577,8 @@ class AdminController
                 $productData[":description_{$lang}"] = null;
             }
 
-            $productId = $this->productModel->create($productData);
-            $product = $this->productModel->getById($productId);
+            $productId = $this->getProductModel()->create($productData);
+            $product = $this->getProductModel()->getById($productId);
             
             Response::success(['product' => $product], 'Product created successfully');
         } catch (Exception $e) {
@@ -534,9 +616,9 @@ class AdminController
                 Response::error('No valid fields to update', 400);
             }
 
-            $this->productModel->update($id, $updateData);
+            $this->getProductModel()->update($id, $updateData);
             
-            $product = $this->productModel->getById($id);
+            $product = $this->getProductModel()->getById($id);
             Response::success(['product' => $product], 'Product updated');
         } catch (Exception $e) {
             Response::error('Failed to update product: ' . $e->getMessage(), 500);
@@ -551,8 +633,8 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
 
         try {
-            $rules = $this->pricingService->getAllRules();
-            $globalMarkup = $this->pricingService->getGlobalMarkup();
+            $rules = $this->getPricingService()->getAllRules();
+            $globalMarkup = $this->getPricingService()->getGlobalMarkup();
 
             Response::success([
                 'global_markup' => $globalMarkup,
@@ -578,11 +660,11 @@ class AdminController
 
         try {
             $markupValue = floatval($input['markup_value']);
-            $this->pricingService->updateGlobalMarkup($markupValue);
+            $this->getPricingService()->updateGlobalMarkup($markupValue);
             
             // Optionally recalculate all prices
             if (!empty($input['recalculate'])) {
-                $updated = $this->pricingService->recalculateAllPrices();
+                $updated = $this->getPricingService()->recalculateAllPrices();
                 Response::success([
                     'markup_value' => $markupValue,
                     'products_updated' => $updated
@@ -612,7 +694,7 @@ class AdminController
             $markupValue = floatval($input['markup_value']);
             $markupType = $input['markup_type'] ?? 'percentage';
             
-            $this->pricingService->setCategoryMarkup($categoryId, $markupValue, $markupType);
+            $this->getPricingService()->setCategoryMarkup($categoryId, $markupValue, $markupType);
             
             Response::success([
                 'category_id' => $categoryId,
@@ -646,7 +728,7 @@ class AdminController
             }
             
             // Sync products (null = all languages)
-            $stats = $this->productSyncService->syncProducts($languageIds);
+            $stats = $this->getProductSyncService()->syncProducts($languageIds);
             
             Response::success($stats, 'Product sync completed successfully');
         } catch (Exception $e) {
@@ -662,7 +744,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
 
         try {
-            $lastSync = $this->productSyncService->getLastSyncStatus();
+            $lastSync = $this->getProductSyncService()->getLastSyncStatus();
             
             Response::success(['last_sync' => $lastSync]);
         } catch (Exception $e) {
@@ -678,7 +760,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
 
         try {
-            $result = $this->orderService->createVendorSalesOrder();
+            $result = $this->getOrderService()->createVendorSalesOrder();
             
             if ($result['success']) {
                 Response::success($result, 'Vendor sales order created successfully');
@@ -698,7 +780,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
         
         try {
-            $categories = $this->categoryModel->getAll('en');
+            $categories = $this->getCategoryModel()->getAll('en');
             Response::success(['categories' => $categories]);
         } catch (Exception $e) {
             Response::error('Failed to load categories: ' . $e->getMessage(), 500);
@@ -745,8 +827,8 @@ class AdminController
                 $data[":name_{$lang}"] = $input["name_{$lang}"] ?? ($lang === 'en' ? $name : null);
             }
 
-            $categoryId = $this->categoryModel->create($data);
-            $category = $this->categoryModel->getById($categoryId);
+            $categoryId = $this->getCategoryModel()->create($data);
+            $category = $this->getCategoryModel()->getById($categoryId);
             
             Response::success(['category' => $category], 'Category created successfully');
         } catch (Exception $e) {
@@ -787,8 +869,8 @@ class AdminController
                 Response::error('No valid fields to update', 400);
             }
 
-            $this->categoryModel->update($id, $updateData);
-            $category = $this->categoryModel->getById($id);
+            $this->getCategoryModel()->update($id, $updateData);
+            $category = $this->getCategoryModel()->getById($id);
             
             Response::success(['category' => $category], 'Category updated successfully');
         } catch (Exception $e) {
@@ -815,7 +897,7 @@ class AdminController
             }
 
             // Soft delete by setting is_active = 0
-            $this->categoryModel->update($id, ['is_active' => 0]);
+            $this->getCategoryModel()->update($id, ['is_active' => 0]);
             
             Response::success([], 'Category deleted successfully');
         } catch (Exception $e) {
@@ -831,7 +913,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
         
         try {
-            $brands = $this->brandModel->getAll('en');
+            $brands = $this->getBrandModel()->getAll('en');
             Response::success(['brands' => $brands]);
         } catch (Exception $e) {
             Response::error('Failed to load brands: ' . $e->getMessage(), 500);
@@ -872,8 +954,8 @@ class AdminController
                 ':is_active' => 1,
             ];
 
-            $brandId = $this->brandModel->create($data);
-            $brand = $this->brandModel->getById($brandId);
+            $brandId = $this->getBrandModel()->create($data);
+            $brand = $this->getBrandModel()->getById($brandId);
             
             Response::success(['brand' => $brand], 'Brand created successfully');
         } catch (Exception $e) {
@@ -914,8 +996,8 @@ class AdminController
                 Response::error('No valid fields to update', 400);
             }
 
-            $this->brandModel->update($id, $updateData);
-            $brand = $this->brandModel->getById($id);
+            $this->getBrandModel()->update($id, $updateData);
+            $brand = $this->getBrandModel()->getById($id);
             
             Response::success(['brand' => $brand], 'Brand updated successfully');
         } catch (Exception $e) {
@@ -981,7 +1063,7 @@ class AdminController
             }
 
             // Soft delete by setting is_active = 0
-            $this->brandModel->update($id, ['is_active' => 0]);
+            $this->getBrandModel()->update($id, ['is_active' => 0]);
             
             Response::success([], 'Brand deleted successfully');
         } catch (Exception $e) {
