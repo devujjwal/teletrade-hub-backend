@@ -467,9 +467,12 @@ class ProductSyncService
             ':last_synced_at' => date('Y-m-d H:i:s')
         ];
         
-        // Add slug only for base language
+        // Add slug (required field, always generate for base language)
         if ($slug) {
             $data[':slug'] = $slug;
+        } else {
+            // Fallback: generate slug from name if not already generated
+            $data[':slug'] = $this->generateSlug($productName);
         }
         
         // Set main description field (required by SQL)
