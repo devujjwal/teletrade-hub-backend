@@ -18,11 +18,11 @@ class Order
     public function create($data)
     {
         $sql = "INSERT INTO orders (
-            order_number, user_id, guest_email, status, payment_status, payment_method,
+            order_number, user_id, guest_email, status, payment_status, fulfillment_status, payment_method,
             subtotal, tax, shipping_cost, total, currency, billing_address_id,
             shipping_address_id, notes, ip_address, user_agent
         ) VALUES (
-            :order_number, :user_id, :guest_email, :status, :payment_status, :payment_method,
+            :order_number, :user_id, :guest_email, :status, :payment_status, :fulfillment_status, :payment_method,
             :subtotal, :tax, :shipping_cost, :total, :currency, :billing_address_id,
             :shipping_address_id, :notes, :ip_address, :user_agent
         )";
@@ -89,14 +89,18 @@ class Order
     public function addItem($orderId, $data)
     {
         $sql = "INSERT INTO order_items (
-            order_id, product_id, product_name, product_sku, vendor_article_id,
-            quantity, base_price, price, subtotal
+            order_id, product_id, product_name, product_sku, product_source, vendor_article_id,
+            quantity, base_price, price, subtotal, fulfillment_status
         ) VALUES (
-            :order_id, :product_id, :product_name, :product_sku, :vendor_article_id,
-            :quantity, :base_price, :price, :subtotal
+            :order_id, :product_id, :product_name, :product_sku, :product_source, :vendor_article_id,
+            :quantity, :base_price, :price, :subtotal, :fulfillment_status
         )";
 
         $data[':order_id'] = $orderId;
+        // Default fulfillment_status if not provided
+        if (!isset($data[':fulfillment_status'])) {
+            $data[':fulfillment_status'] = 'pending';
+        }
         $stmt = $this->db->prepare($sql);
         $stmt->execute($data);
         return $this->db->lastInsertId();
@@ -266,14 +270,19 @@ class Order
 
     /**
      * Get orders ready for vendor submission
+     * Returns orders with status 'reserved' that have vendor items
+     * Only includes orders with vendor products that are reserved and not yet ordered
      */
     public function getReadyForVendorSubmission()
     {
-        $sql = "SELECT * FROM orders 
-                WHERE status = 'reserved' 
-                AND payment_status = 'paid'
-                AND vendor_order_id IS NULL
-                ORDER BY paid_at ASC";
+        $sql = "SELECT DISTINCT o.* FROM orders o
+                INNER JOIN order_items oi ON o.id = oi.order_id
+                WHERE o.status = 'reserved'
+                AND o.payment_status = 'paid'
+                AND oi.product_source = 'vendor'
+                AND oi.fulfillment_status = 'reserved'
+                AND o.vendor_order_id IS NULL
+                ORDER BY o.paid_at ASC";
         
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll();

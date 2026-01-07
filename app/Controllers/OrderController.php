@@ -165,7 +165,8 @@ class OrderController
             Response::forbidden('You do not have permission to access this order');
         }
 
-        $fullOrder = $this->orderService->getOrderDetails($order['id']);
+        // Get order details (sanitized for customer - no internal fields)
+        $fullOrder = $this->orderService->getOrderDetails($order['id'], false);
 
         Response::success(['order' => $fullOrder]);
     }

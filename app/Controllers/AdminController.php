@@ -311,13 +311,14 @@ class AdminController
     }
 
     /**
-     * Get order detail
+     * Get order detail (admin view - includes internal fields)
      */
     public function orderDetail($id)
     {
         $admin = $this->authMiddleware->verifyAdmin();
 
-        $order = $this->orderService->getOrderDetails($id);
+        // Admin gets full details including product_source, fulfillment_status, etc.
+        $order = $this->orderService->getOrderDetails($id, true);
         
         if (!$order) {
             Response::notFound('Order not found');
@@ -347,7 +348,8 @@ class AdminController
         try {
             $this->orderModel->updateStatus($id, $input['status']);
             
-            $order = $this->orderService->getOrderDetails($id);
+            // Admin gets full order details
+            $order = $this->orderService->getOrderDetails($id, true);
             Response::success(['order' => $order], 'Order status updated');
         } catch (Exception $e) {
             Response::error('Failed to update order: ' . $e->getMessage(), 500);

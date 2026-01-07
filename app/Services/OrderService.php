@@ -75,36 +75,66 @@ class OrderService
                 ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null
             ]);
 
-            // Add order items
-            $itemsForReservation = [];
+            // Add order items and separate by source
+            $vendorItems = [];
+            $ownItems = [];
+            
             foreach ($cartItems as $item) {
                 $product = $this->productModel->getById($item['product_id']);
+                
+                // Determine product source (default to vendor for backward compatibility)
+                $productSource = $product['product_source'] ?? 'vendor';
 
                 $this->orderModel->addItem($orderId, [
                     ':product_id' => $product['id'],
                     ':product_name' => $product['name'],
                     ':product_sku' => $product['sku'],
+                    ':product_source' => $productSource,
                     ':vendor_article_id' => $product['vendor_article_id'],
                     ':quantity' => $item['quantity'],
                     ':base_price' => $product['base_price'],
                     ':price' => $product['price'],
-                    ':subtotal' => $product['price'] * $item['quantity']
+                    ':subtotal' => $product['price'] * $item['quantity'],
+                    ':fulfillment_status' => 'pending'
                 ]);
 
-                $itemsForReservation[] = [
-                    'product_id' => $product['id'],
-                    'vendor_article_id' => $product['vendor_article_id'],
-                    'quantity' => $item['quantity']
-                ];
+                // Separate items by source for different processing
+                if ($productSource === 'vendor') {
+                    $vendorItems[] = [
+                        'product_id' => $product['id'],
+                        'vendor_article_id' => $product['vendor_article_id'],
+                        'quantity' => $item['quantity']
+                    ];
+                } else {
+                    $ownItems[] = [
+                        'product_id' => $product['id'],
+                        'quantity' => $item['quantity']
+                    ];
+                }
             }
 
             $this->db->commit();
 
+            // Determine initial fulfillment status
+            $fulfillmentStatus = 'pending';
+            if (!empty($vendorItems) && !empty($ownItems)) {
+                $fulfillmentStatus = 'pending'; // Mixed order
+            } elseif (!empty($vendorItems)) {
+                $fulfillmentStatus = 'vendor_pending'; // Vendor only
+            } elseif (!empty($ownItems)) {
+                $fulfillmentStatus = 'pending'; // Own only
+            }
+            
+            // Update order fulfillment status
+            $this->orderModel->updateFulfillmentStatus($orderId, $fulfillmentStatus);
+
+            // Return customer-friendly response (no internal details)
             return [
                 'order_id' => $orderId,
                 'order_number' => $orderNumber,
                 'total' => $totals['total'],
-                'items_for_reservation' => $itemsForReservation
+                'status' => 'pending',
+                'message' => 'Order created successfully. Please proceed with payment.'
             ];
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -114,34 +144,134 @@ class OrderService
 
     /**
      * Process payment success
+     * Handles mixed orders: reserves vendor products, deducts stock for own products
      */
     public function processPaymentSuccess($orderId, $transactionId)
     {
+        $this->db->beginTransaction();
+        
         try {
             // Update payment status
             $this->orderModel->updatePaymentStatus($orderId, 'paid', $transactionId);
 
             // Get order items
             $orderItems = $this->orderModel->getOrderItems($orderId);
+            
+            // Separate vendor and own items
+            $vendorItems = array_filter($orderItems, function($item) {
+                return ($item['product_source'] ?? 'vendor') === 'vendor';
+            });
+            $ownItems = array_filter($orderItems, function($item) {
+                return ($item['product_source'] ?? 'vendor') === 'own';
+            });
+            
+            $reservations = [];
+            $ownItemsProcessed = [];
+            $errors = [];
 
-            // Reserve products with vendor
-            $reservations = $this->reservationService->reserveOrderProducts($orderId, $orderItems);
+            // Process vendor products: Reserve via API
+            if (!empty($vendorItems)) {
+                try {
+                    $reservations = $this->reservationService->reserveOrderProducts($orderId, $vendorItems);
+                } catch (Exception $e) {
+                    $errors[] = ['type' => 'vendor_reservation', 'error' => $e->getMessage()];
+                    // Don't throw - continue processing own items
+                }
+            }
 
-            // Update order status
-            $this->orderModel->updateStatus($orderId, 'reserved');
+            // Process own products: Deduct stock immediately
+            if (!empty($ownItems)) {
+                foreach ($ownItems as $item) {
+                    try {
+                        // Deduct stock directly (no reservation needed)
+                        $this->productModel->reserveStock($item['product_id'], $item['quantity']);
+                        
+                        // Update item fulfillment status
+                        $this->orderItemModel->updateFulfillmentStatus(
+                            $item['id'], 
+                            'stock_deducted',
+                            'stock_deducted_at'
+                        );
+                        
+                        $ownItemsProcessed[] = $item['id'];
+                    } catch (Exception $e) {
+                        $errors[] = [
+                            'type' => 'own_stock_deduction',
+                            'product_id' => $item['product_id'],
+                            'error' => $e->getMessage()
+                        ];
+                    }
+                }
+            }
 
+            // If vendor reservation failed but own items succeeded, rollback own items
+            if (!empty($errors) && !empty($errors[0]['type']) && $errors[0]['type'] === 'vendor_reservation') {
+                // Rollback own stock deductions
+                foreach ($ownItemsProcessed as $itemId) {
+                    $item = array_filter($ownItems, function($i) use ($itemId) {
+                        return $i['id'] == $itemId;
+                    });
+                    $item = reset($item);
+                    if ($item) {
+                        $this->productModel->releaseStock($item['product_id'], $item['quantity']);
+                    }
+                }
+                
+                $this->db->rollBack();
+                $this->orderModel->updateStatus($orderId, 'payment_pending');
+                throw new Exception('Payment successful but product reservation failed. Please contact support.');
+            }
+
+            // Update order status based on what was processed
+            if (!empty($vendorItems) && !empty($ownItems)) {
+                // Mixed order
+                if (!empty($reservations) && !empty($ownItemsProcessed)) {
+                    $this->orderModel->updateStatus($orderId, 'processing');
+                    $this->orderModel->updateFulfillmentStatus($orderId, 'partially_fulfilled');
+                    $this->orderModel->markOwnItemsFulfilled($orderId);
+                } elseif (!empty($reservations)) {
+                    $this->orderModel->updateStatus($orderId, 'reserved');
+                    $this->orderModel->updateFulfillmentStatus($orderId, 'vendor_pending');
+                } elseif (!empty($ownItemsProcessed)) {
+                    $this->orderModel->updateStatus($orderId, 'processing');
+                    $this->orderModel->updateFulfillmentStatus($orderId, 'own_fulfilled');
+                    $this->orderModel->markOwnItemsFulfilled($orderId);
+                }
+            } elseif (!empty($vendorItems)) {
+                // Vendor only
+                if (!empty($reservations)) {
+                    $this->orderModel->updateStatus($orderId, 'reserved');
+                    $this->orderModel->updateFulfillmentStatus($orderId, 'vendor_pending');
+                }
+            } elseif (!empty($ownItems)) {
+                // Own only
+                if (!empty($ownItemsProcessed)) {
+                    $this->orderModel->updateStatus($orderId, 'processing');
+                    $this->orderModel->updateFulfillmentStatus($orderId, 'own_fulfilled');
+                    $this->orderModel->markOwnItemsFulfilled($orderId);
+                }
+            }
+
+            $this->db->commit();
+
+            // Return customer-friendly response
+            $order = $this->orderModel->getById($orderId);
             return [
                 'success' => true,
-                'reservations' => $reservations
+                'order_number' => $order['order_number'],
+                'status' => $order['status'],
+                'message' => 'Payment processed successfully. Your order is being prepared.'
             ];
         } catch (Exception $e) {
-            // Payment succeeded but reservation failed
+            $this->db->rollBack();
+            
+            // Payment succeeded but processing failed
             $this->orderModel->updateStatus($orderId, 'payment_pending');
             
             // Log error
-            error_log("Reservation failed for order $orderId: " . $e->getMessage());
+            error_log("Order processing failed for order $orderId: " . $e->getMessage());
             
-            throw new Exception('Payment successful but product reservation failed. Please contact support.');
+            throw $e;
         }
     }
 
@@ -189,6 +319,7 @@ class OrderService
 
     /**
      * Create vendor sales order for reserved items
+     * IMPORTANT: Only processes vendor items, own items are handled separately
      */
     public function createVendorSalesOrder()
     {
@@ -208,17 +339,26 @@ class OrderService
 
         foreach ($orders as $order) {
             try {
+                // Check if order has vendor items
+                $orderItems = $this->orderModel->getOrderItems($order['id']);
+                $vendorItems = array_filter($orderItems, function($item) {
+                    return ($item['product_source'] ?? 'vendor') === 'vendor';
+                });
+                
+                // Skip if no vendor items
+                if (empty($vendorItems)) {
+                    continue;
+                }
+                
                 $reservations = $this->reservationService->getReservationStatus($order['id']);
                 
+                // Only proceed if all vendor items are reserved
                 if (!$reservations['all_reserved']) {
                     continue;
                 }
 
-                // Get order items
-                $items = $this->orderModel->getOrderItems($order['id']);
-
-                // Prepare vendor order data
-                $vendorOrderData = $this->prepareVendorOrderData($order, $items);
+                // Prepare vendor order data (only vendor items)
+                $vendorOrderData = $this->prepareVendorOrderData($order, $orderItems);
 
                 // Call vendor API
                 $vendorResponse = $this->vendorApi->createSalesOrder($vendorOrderData);
@@ -228,13 +368,28 @@ class OrderService
                     
                     // Update order with vendor order ID
                     $this->orderModel->updateVendorOrder($order['id'], $vendorOrderId);
+                    
+                    // Update fulfillment status
+                    $orderAfterUpdate = $this->orderModel->getById($order['id']);
+                    if ($orderAfterUpdate['fulfillment_status'] === 'own_fulfilled') {
+                        // Mixed order: own items already fulfilled, vendor items now ordered
+                        $this->orderModel->updateFulfillmentStatus($order['id'], 'partially_fulfilled');
+                    } else {
+                        // Vendor only order
+                        $this->orderModel->updateFulfillmentStatus($order['id'], 'vendor_fulfilled');
+                    }
 
-                    // Mark reservations as ordered
+                    // Mark vendor item reservations as ordered
                     $reservationIds = array_column(
                         $this->reservationService->getReservationsForSalesOrder(), 
                         'id'
                     );
                     $this->reservationService->markAsOrdered($reservationIds);
+                    
+                    // Update vendor item fulfillment status
+                    foreach ($vendorItems as $item) {
+                        $this->orderItemModel->updateFulfillmentStatus($item['id'], 'vendor_ordered');
+                    }
 
                     $processedOrders[] = $order['order_number'];
                 } else {
@@ -258,9 +413,20 @@ class OrderService
 
     /**
      * Prepare vendor order data
+     * IMPORTANT: Only includes vendor items, excludes own products
      */
     private function prepareVendorOrderData($order, $items)
     {
+        // Filter to only vendor items
+        $vendorItems = array_filter($items, function($item) {
+            return ($item['product_source'] ?? 'vendor') === 'vendor' 
+                && !empty($item['vendor_article_id']);
+        });
+        
+        if (empty($vendorItems)) {
+            throw new Exception('No vendor items to process');
+        }
+
         $orderData = [
             'orderNumber' => $order['order_number'],
             'customerEmail' => $order['guest_email'] ?? 'customer@teletrade-hub.com',
@@ -268,7 +434,7 @@ class OrderService
             'shippingAddress' => $this->orderModel->getFullOrder($order['id'])['shipping_address'] ?? []
         ];
 
-        foreach ($items as $item) {
+        foreach ($vendorItems as $item) {
             $orderData['items'][] = [
                 'articleId' => $item['vendor_article_id'],
                 'quantity' => $item['quantity']
@@ -343,10 +509,50 @@ class OrderService
 
     /**
      * Get order details
+     * For customer-facing responses, sanitizes internal fields
      */
-    public function getOrderDetails($orderId)
+    public function getOrderDetails($orderId, $isAdmin = false)
     {
-        return $this->orderModel->getFullOrder($orderId);
+        $order = $this->orderModel->getFullOrder($orderId);
+        
+        if (!$order) {
+            return null;
+        }
+        
+        // For customers, remove internal fields (product_source, fulfillment_status, etc.)
+        if (!$isAdmin) {
+            $order = $this->sanitizeOrderForCustomer($order);
+        }
+        
+        return $order;
+    }
+    
+    /**
+     * Sanitize order response for customer-facing APIs
+     * Removes internal fields like product_source, fulfillment_status, vendor_article_id
+     */
+    private function sanitizeOrderForCustomer($order)
+    {
+        // Remove internal order fields
+        unset($order['fulfillment_status']);
+        unset($order['vendor_order_id']);
+        unset($order['vendor_order_created_at']);
+        unset($order['own_items_fulfilled_at']);
+        unset($order['admin_notes']);
+        
+        // Sanitize order items
+        if (isset($order['items']) && is_array($order['items'])) {
+            foreach ($order['items'] as &$item) {
+                // Remove internal fields from items
+                unset($item['product_source']);
+                unset($item['fulfillment_status']);
+                unset($item['reserved_at']);
+                unset($item['stock_deducted_at']);
+                unset($item['vendor_article_id']); // Internal vendor SKU, not customer-facing
+            }
+        }
+        
+        return $order;
     }
 }
 

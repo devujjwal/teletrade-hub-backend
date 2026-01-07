@@ -244,11 +244,15 @@ class ProductSyncService
 
     /**
      * Sync single product
+     * IMPORTANT: Only syncs vendor products, skips own products
      */
     private function syncSingleProduct($vendorProduct, &$stats, $languageId = 1)
     {
         // Normalize vendor data
         $normalized = $this->normalizeVendorProduct($vendorProduct, $languageId);
+        
+        // CRITICAL: Ensure product_source is set to 'vendor' for all synced products
+        $normalized[':product_source'] = 'vendor';
 
         // Extract images - TRIEL provides both 'images' array and single 'image' field
         $productImages = [];
@@ -260,6 +264,13 @@ class ProductSyncService
 
         // Check if product exists
         $existingProduct = $this->productModel->getByVendorArticleId($normalized[':vendor_article_id']);
+        
+        // CRITICAL: Skip if existing product is own product (protect own products from sync)
+        if ($existingProduct && isset($existingProduct['product_source']) && $existingProduct['product_source'] === 'own') {
+            // Log warning but don't sync - own products should not be modified by vendor sync
+            error_log("Skipping sync for own product SKU: {$normalized[':sku']} (vendor_article_id: {$normalized[':vendor_article_id']})");
+            return; // Exit early - don't modify own products
+        }
 
         if ($existingProduct) {
             // Ensure slug exists for existing products (in case it was created before slug generation)
@@ -384,6 +395,7 @@ class ProductSyncService
         
         // Build data array with language-specific columns
         $data = [
+            ':product_source' => 'vendor', // CRITICAL: Always set to vendor for synced products
             ':vendor_article_id' => $vendorProduct['sku'], // TRIEL uses 'sku' as unique ID
             ':sku' => $vendorProduct['sku'],
             ':ean' => $ean,
@@ -421,6 +433,17 @@ class ProductSyncService
             if (!isset($data[":description_{$lang}"])) {
                 $data[":description_{$lang}"] = null;
             }
+        }
+        
+        // Initialize new fields for own products (not used in vendor sync, but needed for schema)
+        if (!isset($data[':reserved_quantity'])) {
+            $data[':reserved_quantity'] = 0;
+        }
+        if (!isset($data[':reorder_point'])) {
+            $data[':reorder_point'] = 0;
+        }
+        if (!isset($data[':warehouse_location'])) {
+            $data[':warehouse_location'] = null;
         }
         
         // Set current language-specific name column
@@ -614,7 +637,8 @@ class ProductSyncService
     }
 
     /**
-     * Disable products that are no longer available
+     * Disable vendor products that are no longer available
+     * IMPORTANT: Only disables VENDOR products, never touches own products
      */
     private function disableUnavailableProducts($vendorProducts)
     {
@@ -626,8 +650,11 @@ class ProductSyncService
         }
 
         $placeholders = implode(',', array_fill(0, count($vendorIds), '?'));
+        // CRITICAL: Only disable VENDOR products, never own products
         $sql = "UPDATE products SET is_available = 0 
-                WHERE vendor_article_id NOT IN ($placeholders) 
+                WHERE product_source = 'vendor'
+                AND vendor_article_id NOT IN ($placeholders) 
+                AND vendor_article_id IS NOT NULL
                 AND is_available = 1";
         
         $stmt = $this->db->prepare($sql);

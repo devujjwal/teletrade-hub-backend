@@ -219,25 +219,27 @@ class Product
 
     /**
      * Create new product
-     * Supports all language-specific columns
+     * Supports all language-specific columns and product_source
      */
     public function create($data)
     {
         $sql = "INSERT INTO products (
-            vendor_article_id, sku, ean, name, 
+            product_source, vendor_article_id, sku, ean, name, 
             name_en, name_de, name_sk, name_fr, name_es, name_ru, name_it, name_tr, name_ro, name_pl,
             description, description_en, description_de, description_sk, 
             description_fr, description_es, description_ru, description_it, description_tr, description_ro, description_pl,
             category_id, brand_id, warranty_id, base_price, price, currency,
-            stock_quantity, available_quantity, is_available, weight, dimensions,
+            stock_quantity, available_quantity, reserved_quantity, reorder_point, warehouse_location,
+            is_available, weight, dimensions,
             color, storage, ram, specifications, slug, last_synced_at
         ) VALUES (
-            :vendor_article_id, :sku, :ean, :name, 
+            :product_source, :vendor_article_id, :sku, :ean, :name, 
             :name_en, :name_de, :name_sk, :name_fr, :name_es, :name_ru, :name_it, :name_tr, :name_ro, :name_pl,
             :description, :description_en, :description_de, :description_sk, 
             :description_fr, :description_es, :description_ru, :description_it, :description_tr, :description_ro, :description_pl,
             :category_id, :brand_id, :warranty_id, :base_price, :price, :currency,
-            :stock_quantity, :available_quantity, :is_available, :weight, :dimensions,
+            :stock_quantity, :available_quantity, :reserved_quantity, :reorder_point, :warehouse_location,
+            :is_available, :weight, :dimensions,
             :color, :storage, :ram, :specifications, :slug, :last_synced_at
         )";
 
@@ -254,14 +256,15 @@ class Product
     {
         // Whitelist of updatable fields (includes all language-specific columns)
         $allowedFields = [
-            'vendor_article_id', 'sku', 'ean', 'name', 
+            'product_source', 'vendor_article_id', 'sku', 'ean', 'name', 
             'name_en', 'name_de', 'name_sk', 'name_fr', 'name_es', 'name_ru', 
             'name_it', 'name_tr', 'name_ro', 'name_pl',
             'description', 'description_en', 'description_de', 'description_sk', 
             'description_fr', 'description_es', 'description_ru', 'description_it', 
             'description_tr', 'description_ro', 'description_pl',
             'category_id', 'brand_id', 'warranty_id', 'base_price', 'price', 'currency',
-            'stock_quantity', 'available_quantity', 'is_available', 'is_featured', 'weight', 
+            'stock_quantity', 'available_quantity', 'reserved_quantity', 'reorder_point', 
+            'warehouse_location', 'is_available', 'is_featured', 'weight', 
             'dimensions', 'color', 'storage', 'ram', 'specifications', 'slug', 'last_synced_at'
         ];
         

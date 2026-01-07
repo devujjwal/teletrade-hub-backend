@@ -79,8 +79,9 @@ CREATE TABLE IF NOT EXISTS `warranties` (
 -- Products
 CREATE TABLE IF NOT EXISTS `products` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `vendor_article_id` VARCHAR(100) NOT NULL,
-  `sku` VARCHAR(100) NOT NULL,
+  `product_source` ENUM('vendor', 'own') DEFAULT 'vendor' COMMENT 'Source of product: vendor (TRIEL) or own inventory',
+  `vendor_article_id` VARCHAR(100) NULL COMMENT 'Vendor SKU/Article ID (NULL for own products)',
+  `sku` VARCHAR(100) NOT NULL COMMENT 'Internal SKU (unique across all products)',
   `ean` VARCHAR(50) NULL,
   `name` VARCHAR(500) NOT NULL,
   `name_en` VARCHAR(500) NULL,
@@ -107,12 +108,14 @@ CREATE TABLE IF NOT EXISTS `products` (
   `category_id` INT UNSIGNED NULL,
   `brand_id` INT UNSIGNED NULL,
   `warranty_id` INT UNSIGNED NULL,
-  `base_price` DECIMAL(10, 2) NOT NULL COMMENT 'Vendor price without markup',
-  `price` DECIMAL(10, 2) NOT NULL COMMENT 'Customer price with markup',
+  `base_price` DECIMAL(10, 2) NOT NULL COMMENT 'Cost price (vendor price for vendor products, purchase cost for own products)',
+  `price` DECIMAL(10, 2) NOT NULL COMMENT 'Customer selling price (with markup)',
   `currency` VARCHAR(3) DEFAULT 'EUR',
-  `stock_quantity` INT UNSIGNED DEFAULT 0,
-  `available_quantity` INT UNSIGNED DEFAULT 0 COMMENT 'Stock available for sale',
-  `reserved_quantity` INT UNSIGNED DEFAULT 0,
+  `stock_quantity` INT UNSIGNED DEFAULT 0 COMMENT 'Total stock quantity',
+  `available_quantity` INT UNSIGNED DEFAULT 0 COMMENT 'Stock available for sale (stock_quantity - reserved_quantity)',
+  `reserved_quantity` INT UNSIGNED DEFAULT 0 COMMENT 'Quantity reserved for orders',
+  `reorder_point` INT UNSIGNED DEFAULT 0 COMMENT 'Minimum stock level before reorder (for own products)',
+  `warehouse_location` VARCHAR(100) NULL COMMENT 'Warehouse location for own products',
   `is_available` TINYINT(1) DEFAULT 1,
   `is_featured` TINYINT(1) DEFAULT 0,
   `weight` DECIMAL(8, 2) NULL COMMENT 'Weight in kg',
@@ -120,17 +123,18 @@ CREATE TABLE IF NOT EXISTS `products` (
   `color` VARCHAR(100) NULL,
   `storage` VARCHAR(50) NULL COMMENT 'Storage capacity (e.g., 256GB)',
   `ram` VARCHAR(50) NULL COMMENT 'RAM (e.g., 8GB)',
-  `specifications` JSON NULL COMMENT 'Additional specifications',
+  `specifications` JSON NULL COMMENT 'Additional specifications including color_translations',
   `meta_title` VARCHAR(255) NULL,
   `meta_description` TEXT NULL,
   `slug` VARCHAR(500) NOT NULL,
-  `last_synced_at` TIMESTAMP NULL,
+  `last_synced_at` TIMESTAMP NULL COMMENT 'Last sync time from vendor (NULL for own products)',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `vendor_article_id` (`vendor_article_id`),
   UNIQUE KEY `sku` (`sku`),
   UNIQUE KEY `slug` (`slug`),
+  UNIQUE KEY `vendor_article_id` (`vendor_article_id`) COMMENT 'Unique only for vendor products',
+  KEY `product_source` (`product_source`),
   KEY `ean` (`ean`),
   KEY `category_id` (`category_id`),
   KEY `brand_id` (`brand_id`),
@@ -138,6 +142,7 @@ CREATE TABLE IF NOT EXISTS `products` (
   KEY `is_available` (`is_available`),
   KEY `is_featured` (`is_featured`),
   KEY `price` (`price`),
+  KEY `stock_quantity` (`stock_quantity`),
   FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL,
   FOREIGN KEY (`brand_id`) REFERENCES `brands` (`id`) ON DELETE SET NULL,
   FOREIGN KEY (`warranty_id`) REFERENCES `warranties` (`id`) ON DELETE SET NULL
@@ -272,6 +277,7 @@ CREATE TABLE IF NOT EXISTS `orders` (
   `guest_email` VARCHAR(255) NULL,
   `status` ENUM('pending', 'payment_pending', 'paid', 'processing', 'reserved', 'vendor_ordered', 'shipped', 'delivered', 'cancelled', 'refunded') DEFAULT 'pending',
   `payment_status` ENUM('unpaid', 'pending', 'paid', 'failed', 'refunded') DEFAULT 'unpaid',
+  `fulfillment_status` ENUM('pending', 'vendor_pending', 'own_fulfilled', 'vendor_fulfilled', 'fulfilled', 'partially_fulfilled') DEFAULT 'pending' COMMENT 'Tracks fulfillment for mixed orders',
   `payment_method` VARCHAR(50) NULL,
   `payment_transaction_id` VARCHAR(255) NULL,
   `subtotal` DECIMAL(10, 2) NOT NULL,
@@ -286,8 +292,9 @@ CREATE TABLE IF NOT EXISTS `orders` (
   `ip_address` VARCHAR(45) NULL,
   `user_agent` VARCHAR(500) NULL,
   `paid_at` TIMESTAMP NULL,
-  `vendor_order_created_at` TIMESTAMP NULL,
-  `vendor_order_id` VARCHAR(100) NULL,
+  `vendor_order_created_at` TIMESTAMP NULL COMMENT 'When vendor order was created (only for vendor items)',
+  `vendor_order_id` VARCHAR(100) NULL COMMENT 'Vendor order ID (only for vendor items)',
+  `own_items_fulfilled_at` TIMESTAMP NULL COMMENT 'When own products were fulfilled',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -295,6 +302,7 @@ CREATE TABLE IF NOT EXISTS `orders` (
   KEY `user_id` (`user_id`),
   KEY `status` (`status`),
   KEY `payment_status` (`payment_status`),
+  KEY `fulfillment_status` (`fulfillment_status`),
   KEY `created_at` (`created_at`),
   FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   FOREIGN KEY (`billing_address_id`) REFERENCES `addresses` (`id`) ON DELETE SET NULL,
@@ -308,15 +316,23 @@ CREATE TABLE IF NOT EXISTS `order_items` (
   `product_id` INT UNSIGNED NOT NULL,
   `product_name` VARCHAR(500) NOT NULL,
   `product_sku` VARCHAR(100) NOT NULL,
-  `vendor_article_id` VARCHAR(100) NOT NULL,
+  `product_source` ENUM('vendor', 'own') DEFAULT 'vendor' COMMENT 'Source of product at time of order',
+  `vendor_article_id` VARCHAR(100) NULL COMMENT 'Vendor SKU (NULL for own products)',
   `quantity` INT UNSIGNED NOT NULL,
-  `base_price` DECIMAL(10, 2) NOT NULL COMMENT 'Vendor price',
-  `price` DECIMAL(10, 2) NOT NULL COMMENT 'Customer price',
+  `base_price` DECIMAL(10, 2) NOT NULL COMMENT 'Cost price (vendor or purchase cost)',
+  `price` DECIMAL(10, 2) NOT NULL COMMENT 'Customer selling price',
   `subtotal` DECIMAL(10, 2) NOT NULL,
+  `fulfillment_status` ENUM('pending', 'reserved', 'stock_deducted', 'vendor_ordered', 'shipped', 'fulfilled') DEFAULT 'pending' COMMENT 'Individual item fulfillment status',
+  `reserved_at` TIMESTAMP NULL COMMENT 'When vendor product was reserved (vendor only)',
+  `stock_deducted_at` TIMESTAMP NULL COMMENT 'When own product stock was deducted (own only)',
+  `shipped_at` TIMESTAMP NULL COMMENT 'When item was shipped',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `order_id` (`order_id`),
   KEY `product_id` (`product_id`),
+  KEY `product_source` (`product_source`),
+  KEY `fulfillment_status` (`fulfillment_status`),
   FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
   FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -325,19 +341,19 @@ CREATE TABLE IF NOT EXISTS `order_items` (
 -- VENDOR INTEGRATION TABLES
 -- =====================================================
 
--- Reservations
+-- Reservations (only for vendor products)
 CREATE TABLE IF NOT EXISTS `reservations` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `order_id` INT UNSIGNED NOT NULL,
   `product_id` INT UNSIGNED NOT NULL,
-  `vendor_article_id` VARCHAR(100) NOT NULL,
+  `vendor_article_id` VARCHAR(100) NOT NULL COMMENT 'Required for vendor reservations',
   `quantity` INT UNSIGNED NOT NULL,
-  `vendor_reservation_id` VARCHAR(100) NULL,
+  `vendor_reservation_id` VARCHAR(100) NULL COMMENT 'Reservation ID from vendor API',
   `status` ENUM('pending', 'reserved', 'unreserved', 'failed', 'ordered') DEFAULT 'pending',
   `reserved_at` TIMESTAMP NULL,
   `unreserved_at` TIMESTAMP NULL,
   `ordered_at` TIMESTAMP NULL,
-  `vendor_response` JSON NULL,
+  `vendor_response` JSON NULL COMMENT 'Full vendor API response',
   `error_message` TEXT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -346,6 +362,7 @@ CREATE TABLE IF NOT EXISTS `reservations` (
   KEY `product_id` (`product_id`),
   KEY `status` (`status`),
   KEY `reserved_at` (`reserved_at`),
+  KEY `vendor_reservation_id` (`vendor_reservation_id`),
   FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
   FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -418,6 +435,11 @@ ON DUPLICATE KEY UPDATE `key` = `key`;
 -- =====================================================
 
 -- Additional indexes for common queries with all language columns
+-- Note: If running incrementally (not dropping tables), drop indexes first:
+--   DROP INDEX `search_name` ON `products`;
+--   DROP INDEX `search_description` ON `products`;
+--   DROP INDEX `idx_product_source_available` ON `products`;
+
 ALTER TABLE `products` ADD FULLTEXT KEY `search_name` (
   `name`, `name_en`, `name_de`, `name_sk`, 
   `name_fr`, `name_es`, `name_ru`, `name_it`, 
@@ -430,6 +452,9 @@ ALTER TABLE `products` ADD FULLTEXT KEY `search_description` (
   `description_tr`, `description_ro`, `description_pl`
 );
 
+-- Index for filtering by product source and availability
+ALTER TABLE `products` ADD KEY `idx_product_source_available` (`product_source`, `is_available`);
+
 -- =====================================================
 -- VIEWS
 -- =====================================================
@@ -438,6 +463,7 @@ ALTER TABLE `products` ADD FULLTEXT KEY `search_description` (
 CREATE OR REPLACE VIEW `product_list_view` AS
 SELECT 
   p.id,
+  p.product_source,
   p.vendor_article_id,
   p.sku,
   p.ean,
@@ -469,11 +495,15 @@ SELECT
   p.currency,
   p.stock_quantity,
   p.available_quantity,
+  p.reserved_quantity,
+  p.reorder_point,
+  p.warehouse_location,
   p.is_available,
   p.is_featured,
   p.color,
   p.storage,
   p.ram,
+  p.specifications,
   c.id AS category_id,
   c.name AS category_name,
   c.name_en AS category_name_en,
@@ -494,6 +524,7 @@ SELECT
   w.name AS warranty_name,
   w.duration_months AS warranty_months,
   (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+  p.last_synced_at,
   p.created_at,
   p.updated_at
 FROM products p

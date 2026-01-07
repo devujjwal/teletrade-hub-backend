@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../Models/Reservation.php';
 require_once __DIR__ . '/../Models/Product.php';
+require_once __DIR__ . '/../Models/OrderItem.php';
 require_once __DIR__ . '/VendorApiService.php';
 
 /**
@@ -25,13 +26,25 @@ class ReservationService
 
     /**
      * Reserve products for an order
+     * IMPORTANT: Only reserves vendor products, skips own products
      */
     public function reserveOrderProducts($orderId, $orderItems)
     {
         $reservations = [];
         $errors = [];
 
-        foreach ($orderItems as $item) {
+        // Filter to only vendor items
+        $vendorItems = array_filter($orderItems, function($item) {
+            return ($item['product_source'] ?? 'vendor') === 'vendor' 
+                && !empty($item['vendor_article_id']);
+        });
+        
+        if (empty($vendorItems)) {
+            // No vendor items to reserve
+            return [];
+        }
+
+        foreach ($vendorItems as $item) {
             try {
                 $reservation = $this->reserveProduct(
                     $orderId,
@@ -54,7 +67,7 @@ class ReservationService
                 $this->unreserveProduct($reservation['id']);
             }
             
-            throw new Exception('Failed to reserve all products: ' . json_encode($errors));
+            throw new Exception('Failed to reserve all vendor products: ' . json_encode($errors));
         }
 
         return $reservations;
@@ -62,9 +75,25 @@ class ReservationService
 
     /**
      * Reserve single product
+     * IMPORTANT: Only for vendor products - own products should not call this
      */
     public function reserveProduct($orderId, $productId, $vendorArticleId, $quantity)
     {
+        // Validate this is a vendor product
+        $product = $this->productModel->getById($productId);
+        if (!$product) {
+            throw new Exception("Product not found: $productId");
+        }
+        
+        // CRITICAL: Don't reserve own products
+        if (($product['product_source'] ?? 'vendor') === 'own') {
+            throw new Exception("Cannot reserve own product - use direct stock deduction instead");
+        }
+        
+        if (empty($vendorArticleId)) {
+            throw new Exception("Vendor article ID required for vendor products");
+        }
+
         // Create local reservation record
         $reservationId = $this->reservationModel->create([
             ':order_id' => $orderId,
@@ -97,6 +126,16 @@ class ReservationService
 
                 // Update local stock
                 $this->productModel->reserveStock($productId, $quantity);
+                
+                // Update order item fulfillment status
+                $orderItemModel = new OrderItem();
+                $orderItems = $orderItemModel->getByOrderId($orderId);
+                foreach ($orderItems as $item) {
+                    if ($item['product_id'] == $productId && $item['vendor_article_id'] == $vendorArticleId) {
+                        $orderItemModel->updateFulfillmentStatus($item['id'], 'reserved', 'reserved_at');
+                        break;
+                    }
+                }
 
                 return [
                     'id' => $reservationId,
