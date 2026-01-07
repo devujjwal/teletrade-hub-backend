@@ -7,37 +7,101 @@
  * Usage: php cli/sync-stock.php
  * 
  * Recommended cron schedule: Daily at 3:00 AM
- * 0 3 * * * /usr/bin/php /path/to/teletrade-hub-backend/cli/sync-stock.php >> /var/log/teletrade-sync.log 2>&1
+ * 0 3 * * * /usr/local/bin/ea-php83 /path/to/project/cli/sync-stock.php >> /path/to/project/storage/logs/cron-sync.log 2>&1
  */
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Don't display, but log
+ini_set('log_errors', 1);
+
+// Determine base path - works from both cli/ and public/cli/
+$basePath = __DIR__;
+if (basename($basePath) === 'cli') {
+    // Script is in cli/ at root level
+    $basePath = dirname($basePath);
+} else {
+    // Script might be in public/cli/ - go up two levels
+    $basePath = dirname(dirname($basePath));
+}
+
 // Set working directory
-chdir(__DIR__ . '/..');
+chdir($basePath);
+
+// Logging function (define early for error reporting)
+function logMessage($message, $level = 'INFO') {
+    global $basePath;
+    $timestamp = date('Y-m-d H:i:s');
+    $logMessage = "[{$timestamp}] [{$level}] {$message}\n";
+    echo $logMessage;
+    
+    // Ensure logs directory exists
+    $logDir = $basePath . '/storage/logs';
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0755, true);
+    }
+    
+    $logFile = $logDir . '/sync-stock.log';
+    @error_log($logMessage, 3, $logFile);
+}
+
+// Log startup
+logMessage("Script started from: " . __DIR__);
+logMessage("Base path determined: " . $basePath);
+
+// Check if app directory exists
+$appPath = $basePath . '/app';
+if (!is_dir($appPath)) {
+    logMessage("ERROR: app directory not found at: {$appPath}", 'ERROR');
+    logMessage("Current directory: " . getcwd(), 'ERROR');
+    logMessage("Script directory: " . __DIR__, 'ERROR');
+    exit(1);
+}
 
 // Load dependencies
-require_once __DIR__ . '/../app/Config/env.php';
-require_once __DIR__ . '/../app/Config/database.php';
-require_once __DIR__ . '/../app/Utils/Language.php';
-require_once __DIR__ . '/../app/Models/Product.php';
-require_once __DIR__ . '/../app/Models/Category.php';
-require_once __DIR__ . '/../app/Models/Brand.php';
-require_once __DIR__ . '/../app/Services/VendorApiService.php';
-require_once __DIR__ . '/../app/Services/PricingService.php';
-require_once __DIR__ . '/../app/Services/ProductSyncService.php';
+try {
+    require_once $appPath . '/Config/env.php';
+    logMessage("Loaded env.php");
+} catch (Exception $e) {
+    logMessage("ERROR loading env.php: " . $e->getMessage(), 'ERROR');
+    exit(1);
+}
+
+try {
+    require_once $appPath . '/Config/database.php';
+    logMessage("Loaded database.php");
+} catch (Exception $e) {
+    logMessage("ERROR loading database.php: " . $e->getMessage(), 'ERROR');
+    exit(1);
+}
+
+try {
+    require_once $appPath . '/Utils/Language.php';
+    require_once $appPath . '/Models/Product.php';
+    require_once $appPath . '/Models/Category.php';
+    require_once $appPath . '/Models/Brand.php';
+    require_once $appPath . '/Services/VendorApiService.php';
+    require_once $appPath . '/Services/PricingService.php';
+    require_once $appPath . '/Services/ProductSyncService.php';
+    logMessage("Loaded all dependencies");
+} catch (Exception $e) {
+    logMessage("ERROR loading dependencies: " . $e->getMessage(), 'ERROR');
+    logMessage("Stack trace: " . $e->getTraceAsString(), 'ERROR');
+    exit(1);
+}
 
 // Initialize environment
-Env::load();
+try {
+    Env::load();
+    logMessage("Environment loaded");
+} catch (Exception $e) {
+    logMessage("ERROR loading environment: " . $e->getMessage(), 'ERROR');
+    exit(1);
+}
 
 // Increase execution time and memory for multi-language sync
 set_time_limit(600); // 10 minutes
 ini_set('memory_limit', '512M');
-
-// Logging function
-function logMessage($message, $level = 'INFO') {
-    $timestamp = date('Y-m-d H:i:s');
-    $logMessage = "[{$timestamp}] [{$level}] {$message}\n";
-    echo $logMessage;
-    error_log($logMessage, 3, __DIR__ . '/../storage/logs/sync-stock.log');
-}
 
 try {
     logMessage("Starting daily stock sync...");
@@ -80,4 +144,3 @@ try {
     logMessage("Stack trace: " . $e->getTraceAsString(), 'ERROR');
     exit(1);
 }
-
