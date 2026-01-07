@@ -94,12 +94,21 @@ class Product
         // Pagination
         $sql .= " LIMIT :limit OFFSET :offset";
 
+        // Add pagination to params
+        $params[':limit'] = (int)$limit;
+        $params[':offset'] = (int)$offset;
+
         $stmt = $this->db->prepare($sql);
+        
+        // Bind all parameters at once
         foreach ($params as $key => $value) {
-            $stmt->bindValue($key, $value);
+            if ($key === ':limit' || $key === ':offset') {
+                $stmt->bindValue($key, $value, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($key, $value);
+            }
         }
-        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+        
         $stmt->execute();
 
         $products = $stmt->fetchAll();
