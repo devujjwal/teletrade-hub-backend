@@ -81,7 +81,7 @@ class Product
         // Only apply filter if explicitly set to 'vendor' or 'own'
         if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
             $sql .= " AND product_source = :product_source";
-            $params[':product_source'] = (string)$filters['product_source']; // Ensure string type
+            $params[':product_source'] = $filters['product_source']; // Store value for binding
         }
 
         // Search query
@@ -113,7 +113,12 @@ class Product
         foreach ($params as $key => $value) {
             // Skip limit and offset as they're bound separately
             if ($key !== ':limit' && $key !== ':offset') {
-                $stmt->bindValue($key, $value);
+                // Explicitly bind product_source as string for ENUM type
+                if ($key === ':product_source') {
+                    $stmt->bindValue($key, (string)$value, PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value);
+                }
             }
         }
         
@@ -152,7 +157,7 @@ class Product
         // Filter by product source - only apply if explicitly set to 'vendor' or 'own'
         if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
             $sql .= " AND product_source = :product_source";
-            $params[':product_source'] = (string)$filters['product_source']; // Ensure string type
+            $params[':product_source'] = $filters['product_source']; // Store value for binding
         }
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';
@@ -163,7 +168,17 @@ class Product
         }
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        
+        // Bind parameters explicitly, especially for product_source ENUM
+        foreach ($params as $key => $value) {
+            if ($key === ':product_source') {
+                $stmt->bindValue($key, (string)$value, PDO::PARAM_STR);
+            } else {
+                $stmt->bindValue($key, $value);
+            }
+        }
+        
+        $stmt->execute();
         return $stmt->fetchColumn();
     }
 
