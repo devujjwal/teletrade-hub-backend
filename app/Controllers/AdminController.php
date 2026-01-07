@@ -12,7 +12,9 @@ require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Models/Settings.php';
 require_once __DIR__ . '/../Utils/Language.php';
 require_once __DIR__ . '/../Utils/Sanitizer.php';
-require_once __DIR__ . '/../Config/database.php';
+if (!class_exists('Database')) {
+    require_once __DIR__ . '/../Config/database.php';
+}
 
 /**
  * Admin Controller

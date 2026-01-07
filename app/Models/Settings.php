@@ -1,6 +1,8 @@
 <?php
 
-require_once __DIR__ . '/../Config/database.php';
+if (!class_exists('Database')) {
+    require_once __DIR__ . '/../Config/database.php';
+}
 
 /**
  * Settings Model
