@@ -285,6 +285,24 @@ class AdminController
     }
 
     /**
+     * Debug: Simple test (temporary - no dependencies)
+     */
+    public function simpleTest()
+    {
+        error_log("=== SIMPLE TEST START ===");
+        try {
+            Response::success([
+                'message' => 'AdminController instantiated successfully',
+                'php_version' => phpversion(),
+                'time' => date('Y-m-d H:i:s')
+            ]);
+        } catch (Exception $e) {
+            error_log("Simple test error: " . $e->getMessage());
+            Response::error('Simple test failed: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Debug: Test admin login setup (temporary - no auth required)
      */
     public function testLoginSetup()
