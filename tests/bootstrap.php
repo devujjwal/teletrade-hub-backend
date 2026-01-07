@@ -88,6 +88,8 @@ class TestDatabase
             brand_id INTEGER,
             base_price DECIMAL(10,2) NOT NULL,
             price DECIMAL(10,2) NOT NULL,
+            currency VARCHAR(3) DEFAULT 'EUR',
+            stock_quantity INTEGER DEFAULT 0,
             available_quantity INTEGER DEFAULT 0,
             reserved_quantity INTEGER DEFAULT 0,
             is_available BOOLEAN DEFAULT 1,
@@ -239,9 +241,7 @@ class TestDatabase
         self::$connection->exec("
             CREATE VIEW IF NOT EXISTS product_list_view AS
             SELECT 
-                p.id, p.vendor_article_id, p.sku, p.name, p.color, p.storage, p.ram,
-                p.base_price, p.price, p.currency, p.stock_quantity, p.available_quantity,
-                p.is_available, p.is_featured, p.created_at, p.updated_at,
+                p.*,
                 c.id AS category_id, c.name AS category_name, c.slug AS category_slug,
                 b.id AS brand_id, b.name AS brand_name, b.slug AS brand_slug,
                 w.id AS warranty_id, w.name AS warranty_name, w.duration_months AS warranty_months,

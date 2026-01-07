@@ -305,8 +305,8 @@ class PricingServiceTest extends TestCase
         $basePrice = 999999.99;
         $customerPrice = $this->pricingService->calculatePrice($basePrice);
         
-        // Should calculate correctly
-        $expected = 999999.99 * 1.15;
+        // Should calculate correctly and round to 2 decimal places
+        $expected = round(999999.99 * 1.15, 2);
         $this->assertEquals($expected, $customerPrice);
     }
     
