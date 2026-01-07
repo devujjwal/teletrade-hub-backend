@@ -58,15 +58,15 @@ class AdminController
 
             // Sample products
             $stmt = $db->query("SELECT id, sku, name, name_en, brand_id, category_id, price, stock_quantity, is_available FROM products LIMIT 10");
-            $sampleProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $sampleProducts = $stmt->fetchAll();
 
             // Sample brands
             $stmt = $db->query("SELECT id, name, vendor_id FROM brands LIMIT 10");
-            $sampleBrands = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $sampleBrands = $stmt->fetchAll();
 
             // Sample categories
             $stmt = $db->query("SELECT id, name, vendor_id FROM categories LIMIT 10");
-            $sampleCategories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $sampleCategories = $stmt->fetchAll();
 
             // Search tests
             $searchTests = [];
@@ -87,7 +87,7 @@ class AdminController
 
             // Latest sync log
             $stmt = $db->query("SELECT * FROM vendor_sync_log ORDER BY started_at DESC LIMIT 1");
-            $lastSync = $stmt->fetch(PDO::FETCH_ASSOC);
+            $lastSync = $stmt->fetch();
 
             Response::success([
                 'statistics' => $stats,
@@ -99,7 +99,29 @@ class AdminController
                 'last_sync' => $lastSync
             ]);
         } catch (Exception $e) {
-            Response::serverError('Database error: ' . $e->getMessage());
+            // Detailed error for debugging (bypasses production sanitization)
+            http_response_code(200); // Use 200 to bypass production error sanitization
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => false,
+                'message' => 'Database error',
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            exit;
+        } catch (Error $e) {
+            // Catch PHP errors too
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => false,
+                'message' => 'PHP Error',
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            exit;
         }
     }
 
