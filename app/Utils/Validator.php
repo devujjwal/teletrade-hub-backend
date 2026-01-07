@@ -87,6 +87,40 @@ class Validator
     {
         return in_array($value, $allowed, true);
     }
+    
+    /**
+     * Validate password strength
+     * SECURITY: Enforce strong password policy
+     */
+    public static function strongPassword($password)
+    {
+        // Minimum 8 characters
+        if (strlen($password) < 8) {
+            return false;
+        }
+        
+        // At least one uppercase letter
+        if (!preg_match('/[A-Z]/', $password)) {
+            return false;
+        }
+        
+        // At least one lowercase letter
+        if (!preg_match('/[a-z]/', $password)) {
+            return false;
+        }
+        
+        // At least one number
+        if (!preg_match('/[0-9]/', $password)) {
+            return false;
+        }
+        
+        // At least one special character
+        if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+            return false;
+        }
+        
+        return true;
+    }
 
     /**
      * Validate data against rules
@@ -161,6 +195,12 @@ class Validator
                     case 'in':
                         if ($value && !self::in($value, $params)) {
                             $errors[$field][] = "The $field must be one of: " . implode(', ', $params);
+                        }
+                        break;
+                    
+                    case 'strong_password':
+                        if ($value && !self::strongPassword($value)) {
+                            $errors[$field][] = "The $field must contain at least 8 characters with uppercase, lowercase, number, and special character.";
                         }
                         break;
                 }

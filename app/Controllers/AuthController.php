@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../Models/User.php';
+require_once __DIR__ . '/../Middlewares/RateLimitMiddleware.php';
 
 /**
  * Auth Controller
@@ -9,10 +10,12 @@ require_once __DIR__ . '/../Models/User.php';
 class AuthController
 {
     private $userModel;
+    private $rateLimiter;
 
     public function __construct()
     {
         $this->userModel = new User();
+        $this->rateLimiter = new RateLimitMiddleware();
     }
 
     /**
@@ -26,10 +29,14 @@ class AuthController
             Response::error('Invalid request data', 400);
         }
 
-        // Validate input
+        // SECURITY: Rate limiting to prevent registration spam
+        $clientIp = RateLimitMiddleware::getClientIdentifier();
+        $this->rateLimiter->enforce($clientIp, 'customer_register', 3, 3600); // 3 attempts per hour
+
+        // Validate input with strong password requirement
         $errors = Validator::validate($input, [
             'email' => 'required|email',
-            'password' => 'required|min:8',
+            'password' => 'required|min:8|strong_password',
             'first_name' => 'required',
             'last_name' => 'required'
         ]);
@@ -40,7 +47,8 @@ class AuthController
 
         // Check if email already exists
         if ($this->userModel->emailExists($input['email'])) {
-            Response::error('Email already registered', 400);
+            // SECURITY: Generic error to prevent email enumeration
+            Response::error('Registration failed. Please try again.', 400);
         }
 
         try {
@@ -82,6 +90,10 @@ class AuthController
             Response::error('Invalid request data', 400);
         }
 
+        // SECURITY: Rate limiting to prevent brute force attacks
+        $clientIp = RateLimitMiddleware::getClientIdentifier();
+        $this->rateLimiter->enforce($clientIp, 'customer_login', 5, 900); // 5 attempts per 15 minutes
+
         // Validate input
         $errors = Validator::validate($input, [
             'email' => 'required|email',
@@ -96,12 +108,16 @@ class AuthController
             $user = $this->userModel->getByEmail($input['email']);
 
             if (!$user || !password_verify($input['password'], $user['password_hash'])) {
+                // SECURITY: Generic error message to prevent user enumeration
                 Response::error('Invalid email or password', 401);
             }
 
             if (!$user['is_active']) {
                 Response::error('Account is disabled', 403);
             }
+
+            // SECURITY: Clear rate limit on successful login
+            $this->rateLimiter->clearLimit($clientIp, 'customer_login');
 
             // Remove password hash from response
             unset($user['password_hash']);

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../Middlewares/AuthMiddleware.php';
+require_once __DIR__ . '/../Middlewares/RateLimitMiddleware.php';
 require_once __DIR__ . '/../Services/OrderService.php';
 require_once __DIR__ . '/../Services/ProductSyncService.php';
 require_once __DIR__ . '/../Services/PricingService.php';
@@ -14,6 +15,7 @@ require_once __DIR__ . '/../Models/Product.php';
 class AdminController
 {
     private $authMiddleware;
+    private $rateLimiter;
     private $orderService;
     private $orderModel;
     private $productModel;
@@ -24,6 +26,7 @@ class AdminController
     public function __construct()
     {
         $this->authMiddleware = new AuthMiddleware();
+        $this->rateLimiter = new RateLimitMiddleware();
         $this->orderService = new OrderService();
         $this->orderModel = new Order();
         $this->productModel = new Product();
@@ -43,6 +46,10 @@ class AdminController
             Response::error('Invalid request data', 400);
         }
 
+        // SECURITY: Strict rate limiting for admin login (more restrictive than customer login)
+        $clientIp = RateLimitMiddleware::getClientIdentifier();
+        $this->rateLimiter->enforce($clientIp, 'admin_login', 3, 900); // 3 attempts per 15 minutes
+
         // Validate input
         $errors = Validator::validate($input, [
             'username' => 'required',
@@ -57,12 +64,16 @@ class AdminController
             // Get admin user
             $sql = "SELECT * FROM admin_users WHERE username = :username AND is_active = 1";
             $stmt = $this->db->prepare($sql);
-            $stmt->execute([':username' => $input['username']]);
+            $stmt->execute([':username' => Sanitizer::string($input['username'])]);
             $admin = $stmt->fetch();
 
             if (!$admin || !password_verify($input['password'], $admin['password_hash'])) {
-                Response::error('Invalid username or password', 401);
+                // SECURITY: Generic error message to prevent username enumeration
+                Response::error('Invalid credentials', 401);
             }
+
+            // SECURITY: Clear rate limit on successful login
+            $this->rateLimiter->clearLimit($clientIp, 'admin_login');
 
             // Update last login
             $updateSql = "UPDATE admin_users SET last_login_at = NOW() WHERE id = :id";
@@ -71,6 +82,9 @@ class AdminController
 
             // Create session token
             $session = $this->authMiddleware->createAdminSession($admin['id']);
+
+            // SECURITY: Log admin login for audit trail
+            error_log("AUDIT: Admin login successful - Username: {$admin['username']}, IP: $clientIp");
 
             // Remove password hash
             unset($admin['password_hash']);
@@ -81,6 +95,8 @@ class AdminController
                 'expires_at' => $session['expires_at']
             ], 'Login successful');
         } catch (Exception $e) {
+            // SECURITY: Log failed login attempts
+            error_log("AUDIT: Admin login failed - Username: " . ($input['username'] ?? 'unknown') . ", IP: $clientIp");
             Response::error('Login failed: ' . $e->getMessage(), 500);
         }
     }

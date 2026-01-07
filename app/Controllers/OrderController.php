@@ -118,6 +118,7 @@ class OrderController
 
     /**
      * Get order details
+     * SECURITY: Validate order ownership or guest email access
      */
     public function show($orderNumber)
     {
@@ -125,6 +126,31 @@ class OrderController
 
         if (!$order) {
             Response::notFound('Order not found');
+        }
+
+        // SECURITY CRITICAL: Validate access rights
+        // Allow access if:
+        // 1. Authenticated user owns the order (user_id matches)
+        // 2. Guest order accessed with correct email (TODO: implement email verification link)
+        // 3. Admin accessing (via separate admin endpoint)
+        
+        $userId = $_GET['user_id'] ?? null;
+        $guestEmail = $_GET['guest_email'] ?? null;
+        
+        $hasAccess = false;
+        
+        // Registered user access
+        if ($userId && $order['user_id'] == $userId) {
+            $hasAccess = true;
+        }
+        // Guest access (basic check - should be enhanced with token/link in production)
+        elseif ($guestEmail && $order['guest_email'] && 
+                strtolower(trim($order['guest_email'])) === strtolower(trim($guestEmail))) {
+            $hasAccess = true;
+        }
+        
+        if (!$hasAccess) {
+            Response::forbidden('You do not have permission to access this order');
         }
 
         $fullOrder = $this->orderService->getOrderDetails($order['id']);

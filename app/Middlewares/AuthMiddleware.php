@@ -69,6 +69,7 @@ class AuthMiddleware
 
     /**
      * Create admin session
+     * SECURITY: Use cryptographically secure random bytes for token
      */
     public function createAdminSession($adminUserId, $tokenExpiry = null)
     {
@@ -76,8 +77,12 @@ class AuthMiddleware
             $tokenExpiry = intval(Env::get('ADMIN_TOKEN_EXPIRY', 86400)); // 24 hours
         }
 
+        // SECURITY: Generate cryptographically secure token (64 chars hex = 32 bytes)
         $token = bin2hex(random_bytes(32));
         $expiresAt = date('Y-m-d H:i:s', time() + $tokenExpiry);
+
+        // SECURITY: Clean up old expired sessions before creating new one
+        $this->cleanExpiredSessions();
 
         $sql = "INSERT INTO admin_sessions (
             admin_user_id, token, ip_address, user_agent, expires_at
@@ -90,7 +95,7 @@ class AuthMiddleware
             ':admin_user_id' => $adminUserId,
             ':token' => $token,
             ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
-            ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
+            ':user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500),
             ':expires_at' => $expiresAt
         ]);
 
