@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../Config/database.php';
+
 /**
  * Settings Model
  * Handles application settings stored as key-value pairs
