@@ -112,30 +112,36 @@ class ProductController
      */
     public function search()
     {
-        $query = Sanitizer::string($_GET['q'] ?? '');
-        $lang = $_GET['lang'] ?? 'en';
-        $page = max(1, intval($_GET['page'] ?? 1));
-        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        try {
+            $query = Sanitizer::string($_GET['q'] ?? '');
+            $lang = $_GET['lang'] ?? 'en';
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
 
-        if (empty($query)) {
-            Response::error('Search query is required', 400);
+            if (empty($query)) {
+                Response::error('Search query is required', 400);
+            }
+
+            $filters = ['search' => $query];
+            $products = $this->productModel->getAll($filters, $page, $limit, $lang);
+            $total = $this->productModel->count($filters);
+
+            // Return empty results instead of error when no products found
+            Response::success([
+                'products' => $products,
+                'pagination' => [
+                    'page' => $page,
+                    'limit' => $limit,
+                    'total' => $total,
+                    'pages' => max(1, ceil($total / $limit))
+                ],
+                'query' => $query
+            ]);
+        } catch (Exception $e) {
+            // Log error for debugging
+            error_log("Search error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+            Response::error('Search failed: ' . $e->getMessage(), 500);
         }
-
-        $filters = ['search' => $query];
-        $products = $this->productModel->getAll($filters, $page, $limit, $lang);
-        $total = $this->productModel->count($filters);
-
-        // Return empty results instead of error when no products found
-        Response::success([
-            'products' => $products,
-            'pagination' => [
-                'page' => $page,
-                'limit' => $limit,
-                'total' => $total,
-                'pages' => max(1, ceil($total / $limit))
-            ],
-            'query' => $query
-        ]);
     }
 
     /**
