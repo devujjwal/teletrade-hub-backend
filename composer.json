@@ -28,7 +28,6 @@
         },
         "files": [
             "app/Config/env.php",
-            "app/Config/database.php",
             "app/Utils/Response.php",
             "app/Utils/Validator.php",
             "app/Utils/Sanitizer.php",

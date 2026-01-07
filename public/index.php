@@ -25,6 +25,9 @@ date_default_timezone_set(getenv('TIMEZONE') ?: 'Europe/Berlin');
 require_once __DIR__ . '/../app/Config/env.php';
 Env::load();
 
+// Load database configuration (for production)
+require_once __DIR__ . '/../app/Config/database.php';
+
 // Apply security headers
 require_once __DIR__ . '/../app/Middlewares/SecurityHeadersMiddleware.php';
 SecurityHeadersMiddleware::apply();

@@ -43,9 +43,9 @@ spl_autoload_register(function ($class) {
     }
 });
 
-// Load core files
+// Load core files (skip database.php as we'll provide a test version)
 require_once BASE_PATH . '/app/Config/env.php';
-require_once BASE_PATH . '/app/Config/database.php';
+// NOTE: Skip loading production database.php - we provide TestDatabase below
 require_once BASE_PATH . '/app/Utils/Response.php';
 require_once BASE_PATH . '/app/Utils/Validator.php';
 require_once BASE_PATH . '/app/Utils/Sanitizer.php';
@@ -301,17 +301,19 @@ class MockVendorApi
     }
 }
 
-// Override Database class for testing
-class Database
-{
-    public static function getConnection()
+// Provide Database class for testing (uses TestDatabase internally)
+if (!class_exists('Database')) {
+    class Database
     {
-        return TestDatabase::getConnection();
-    }
-    
-    public static function closeConnection()
-    {
-        TestDatabase::close();
+        public static function getConnection()
+        {
+            return TestDatabase::getConnection();
+        }
+        
+        public static function closeConnection()
+        {
+            TestDatabase::close();
+        }
     }
 }
 
