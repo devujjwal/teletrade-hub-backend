@@ -99,9 +99,52 @@ ADD COLUMN `description_pl` TEXT NULL AFTER `description_ro`;
 -- UPDATE FULLTEXT INDEXES TO INCLUDE NEW LANGUAGES
 -- =====================================================
 
--- Drop existing fulltext indexes
-ALTER TABLE `products` DROP INDEX IF EXISTS `search_name`;
-ALTER TABLE `products` DROP INDEX IF EXISTS `search_description`;
+-- Drop existing fulltext indexes (using procedure for compatibility)
+SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='';
+DELIMITER $$
+
+-- Drop search_name index if exists
+DROP PROCEDURE IF EXISTS drop_index_if_exists_search_name$$
+CREATE PROCEDURE drop_index_if_exists_search_name()
+BEGIN
+    DECLARE index_exists INT DEFAULT 0;
+    
+    SELECT COUNT(*) INTO index_exists
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+    AND table_name = 'products'
+    AND index_name = 'search_name';
+    
+    IF index_exists > 0 THEN
+        ALTER TABLE `products` DROP INDEX `search_name`;
+    END IF;
+END$$
+
+CALL drop_index_if_exists_search_name()$$
+DROP PROCEDURE drop_index_if_exists_search_name$$
+
+-- Drop search_description index if exists
+DROP PROCEDURE IF EXISTS drop_index_if_exists_search_desc$$
+CREATE PROCEDURE drop_index_if_exists_search_desc()
+BEGIN
+    DECLARE index_exists INT DEFAULT 0;
+    
+    SELECT COUNT(*) INTO index_exists
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+    AND table_name = 'products'
+    AND index_name = 'search_description';
+    
+    IF index_exists > 0 THEN
+        ALTER TABLE `products` DROP INDEX `search_description`;
+    END IF;
+END$$
+
+CALL drop_index_if_exists_search_desc()$$
+DROP PROCEDURE drop_index_if_exists_search_desc$$
+
+DELIMITER ;
+SET SQL_MODE=@OLD_SQL_MODE;
 
 -- Recreate fulltext indexes with all languages
 ALTER TABLE `products` 
