@@ -472,6 +472,11 @@ class ProductSyncService
             $data[':slug'] = $slug;
         }
         
+        // Set main description field (required by SQL)
+        if (!isset($data[':description'])) {
+            $data[':description'] = null;
+        }
+        
         // Initialize all language-specific columns to NULL
         $supportedLanguages = ['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'];
         foreach ($supportedLanguages as $lang) {
