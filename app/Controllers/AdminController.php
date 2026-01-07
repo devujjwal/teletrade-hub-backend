@@ -70,10 +70,11 @@ class AdminController
 
             // Search tests
             $searchTests = [];
-            $searchTerms = ['iPhone', 'Samsung', 'phone', 'mobile', 'Apple'];
+            $searchTerms = ['iPhone', 'Samsung', 'phone', 'mobile', 'Apple', 'Google', 'Pixel'];
             foreach ($searchTerms as $term) {
-                $stmt = $db->prepare("SELECT COUNT(*) FROM products WHERE name LIKE :search OR sku LIKE :search");
-                $stmt->execute([':search' => "%$term%"]);
+                $searchPattern = '%' . $term . '%';
+                $stmt = $db->prepare("SELECT COUNT(*) FROM products WHERE name LIKE ? OR sku LIKE ?");
+                $stmt->execute([$searchPattern, $searchPattern]);
                 $searchTests[$term] = $stmt->fetchColumn();
             }
 

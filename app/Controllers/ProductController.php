@@ -125,13 +125,14 @@ class ProductController
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
 
+        // Return empty results instead of error when no products found
         Response::success([
             'products' => $products,
             'pagination' => [
                 'page' => $page,
                 'limit' => $limit,
                 'total' => $total,
-                'pages' => ceil($total / $limit)
+                'pages' => max(1, ceil($total / $limit))
             ],
             'query' => $query
         ]);

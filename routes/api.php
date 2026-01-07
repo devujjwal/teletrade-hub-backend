@@ -147,8 +147,8 @@ $router->get('health', 'HealthController', 'check');
 
 // Products
 $router->get('products', 'ProductController', 'index');
+$router->get('products/search', 'ProductController', 'search'); // Must come before products/{id}
 $router->get('products/{id}', 'ProductController', 'show');
-$router->get('products/search', 'ProductController', 'search');
 
 // Categories
 $router->get('categories', 'ProductController', 'categories');
