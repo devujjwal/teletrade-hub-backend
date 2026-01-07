@@ -177,8 +177,6 @@ $router->post('auth/login', 'AuthController', 'login');
 // ==================== Admin API Routes ====================
 
 // Admin Auth
-$router->get('admin/test-login-setup', 'AdminController', 'testLoginSetup');
-$router->get('admin/simple-test', 'AdminController', 'simpleTest');
 $router->post('admin/login', 'AdminController', 'login');
 
 // Admin Dashboard

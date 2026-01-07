@@ -285,140 +285,21 @@ class AdminController
     }
 
     /**
-     * Debug: Simple test (temporary - no dependencies)
-     */
-    public function simpleTest()
-    {
-        error_log("=== SIMPLE TEST START ===");
-        try {
-            Response::success([
-                'message' => 'AdminController instantiated successfully',
-                'php_version' => phpversion(),
-                'time' => date('Y-m-d H:i:s')
-            ]);
-        } catch (Exception $e) {
-            error_log("Simple test error: " . $e->getMessage());
-            Response::error('Simple test failed: ' . $e->getMessage(), 500);
-        }
-    }
-
-    /**
-     * Debug: Test admin login setup (temporary - no auth required)
-     */
-    public function testLoginSetup()
-    {
-        try {
-            $tests = [];
-            
-            // Test 1: Database connection
-            try {
-                $db = Database::getConnection();
-                $tests['database_connection'] = 'OK';
-            } catch (Exception $e) {
-                $tests['database_connection'] = 'FAILED: ' . $e->getMessage();
-            }
-            
-            // Test 2: admin_users table exists
-            try {
-                $stmt = $db->query("SHOW TABLES LIKE 'admin_users'");
-                $exists = $stmt->fetch();
-                $tests['admin_users_table'] = $exists ? 'EXISTS' : 'NOT FOUND';
-            } catch (Exception $e) {
-                $tests['admin_users_table'] = 'ERROR: ' . $e->getMessage();
-            }
-            
-            // Test 3: admin_sessions table exists
-            try {
-                $stmt = $db->query("SHOW TABLES LIKE 'admin_sessions'");
-                $exists = $stmt->fetch();
-                $tests['admin_sessions_table'] = $exists ? 'EXISTS' : 'NOT FOUND';
-            } catch (Exception $e) {
-                $tests['admin_sessions_table'] = 'ERROR: ' . $e->getMessage();
-            }
-            
-            // Test 4: Check if any admin users exist
-            try {
-                $stmt = $db->query("SELECT COUNT(*) as count FROM admin_users");
-                $result = $stmt->fetch();
-                $tests['admin_users_count'] = $result['count'] ?? 0;
-            } catch (Exception $e) {
-                $tests['admin_users_count'] = 'ERROR: ' . $e->getMessage();
-            }
-            
-            // Test 5: Check admin user with username 'admin'
-            try {
-                $stmt = $db->prepare("SELECT id, username, is_active FROM admin_users WHERE username = :username");
-                $stmt->execute([':username' => 'admin']);
-                $admin = $stmt->fetch();
-                $tests['admin_user_exists'] = $admin ? 'YES (ID: ' . $admin['id'] . ', Active: ' . $admin['is_active'] . ')' : 'NO';
-            } catch (Exception $e) {
-                $tests['admin_user_exists'] = 'ERROR: ' . $e->getMessage();
-            }
-            
-            // Test 6: AuthMiddleware instantiation
-            try {
-                $auth = new AuthMiddleware();
-                $tests['auth_middleware'] = 'OK';
-            } catch (Exception $e) {
-                $tests['auth_middleware'] = 'FAILED: ' . $e->getMessage();
-            }
-            
-            // Test 7: RateLimitMiddleware instantiation
-            try {
-                $rateLimiter = new RateLimitMiddleware();
-                $tests['rate_limiter'] = 'OK';
-            } catch (Exception $e) {
-                $tests['rate_limiter'] = 'FAILED: ' . $e->getMessage();
-            }
-            
-            // Test 8: Env class
-            try {
-                $tokenExpiry = Env::get('ADMIN_TOKEN_EXPIRY', 86400);
-                $tests['env_class'] = 'OK (TOKEN_EXPIRY: ' . $tokenExpiry . ')';
-            } catch (Exception $e) {
-                $tests['env_class'] = 'FAILED: ' . $e->getMessage();
-            }
-            
-            Response::success([
-                'tests' => $tests,
-                'php_version' => phpversion(),
-                'server_time' => date('Y-m-d H:i:s')
-            ]);
-        } catch (Exception $e) {
-            Response::error('Test failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine(), 500);
-        }
-    }
-
-    /**
      * Admin login
      */
     public function login()
     {
-        // Add diagnostic logging
-        error_log("=== ADMIN LOGIN START ===");
-        error_log("Request method: " . $_SERVER['REQUEST_METHOD']);
-        error_log("Request URI: " . $_SERVER['REQUEST_URI']);
-        
         try {
-            error_log("Step 1: Reading input");
             $input = json_decode(file_get_contents('php://input'), true);
-            error_log("Input received: " . ($input ? 'YES' : 'NO'));
 
             if (!$input) {
-                error_log("Error: No input data");
                 Response::error('Invalid request data', 400);
             }
 
-            error_log("Step 2: Getting client IP");
             // SECURITY: Strict rate limiting for admin login (more restrictive than customer login)
             $clientIp = RateLimitMiddleware::getClientIdentifier();
-            error_log("Client IP: " . $clientIp);
-            
-            error_log("Step 3: Enforcing rate limit");
             $this->rateLimiter->enforce($clientIp, 'admin_login', 3, 900); // 3 attempts per 15 minutes
-            error_log("Rate limit OK");
 
-            error_log("Step 4: Validating input");
             // Validate input
             $errors = Validator::validate($input, [
                 'username' => 'required',
@@ -426,54 +307,42 @@ class AdminController
             ]);
 
             if (!empty($errors)) {
-                error_log("Validation failed: " . json_encode($errors));
                 Response::error('Validation failed', 400, $errors);
             }
-            error_log("Validation OK");
 
-            error_log("Step 5: Querying database for admin user");
             // Get admin user
             $sql = "SELECT * FROM admin_users WHERE username = :username AND is_active = 1";
             $stmt = $this->db->prepare($sql);
             $stmt->execute([':username' => Sanitizer::string($input['username'])]);
             $admin = $stmt->fetch();
-            error_log("Admin found: " . ($admin ? 'YES (ID: ' . $admin['id'] . ')' : 'NO'));
 
             if (!$admin || !password_verify($input['password'], $admin['password_hash'])) {
                 // SECURITY: Generic error message to prevent username enumeration
-                error_log("Invalid credentials - admin not found or password mismatch");
                 Response::error('Invalid credentials', 401);
             }
 
-            error_log("Step 6: Password verified, clearing rate limit");
             // SECURITY: Clear rate limit on successful login
             $this->rateLimiter->clearLimit($clientIp, 'admin_login');
 
-            error_log("Step 7: Updating last login time");
             // Update last login
             $updateSql = "UPDATE admin_users SET last_login_at = NOW() WHERE id = :id";
             $updateStmt = $this->db->prepare($updateSql);
             $updateStmt->execute([':id' => $admin['id']]);
 
-            error_log("Step 8: Creating admin session");
             // Create session token
             $session = $this->authMiddleware->createAdminSession($admin['id']);
-            error_log("Session created successfully");
 
-            error_log("Step 9: Preparing response");
             // SECURITY: Log admin login for audit trail
             error_log("AUDIT: Admin login successful - Username: {$admin['username']}, IP: $clientIp");
 
             // Remove password hash
             unset($admin['password_hash']);
 
-            error_log("Step 10: Sending success response");
             Response::success([
                 'admin' => $admin,
                 'token' => $session['token'],
                 'expires_at' => $session['expires_at']
             ], 'Login successful');
-            error_log("=== ADMIN LOGIN SUCCESS ===");
         } catch (Exception $e) {
             // SECURITY: Log failed login attempts with full error details
             $errorDetails = [
