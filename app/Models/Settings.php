@@ -14,7 +14,12 @@ class Settings
 
     public function __construct()
     {
-        $this->db = Database::getConnection();
+        try {
+            $this->db = Database::getConnection();
+        } catch (Exception $e) {
+            error_log("Settings Model: Database connection failed - " . $e->getMessage());
+            throw new Exception("Failed to initialize Settings model: " . $e->getMessage());
+        }
     }
 
     /**

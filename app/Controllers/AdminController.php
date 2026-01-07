@@ -9,12 +9,12 @@ require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
-require_once __DIR__ . '/../Models/Settings.php';
 require_once __DIR__ . '/../Utils/Language.php';
 require_once __DIR__ . '/../Utils/Sanitizer.php';
 if (!class_exists('Database')) {
     require_once __DIR__ . '/../Config/database.php';
 }
+require_once __DIR__ . '/../Models/Settings.php';
 
 /**
  * Admin Controller
@@ -43,10 +43,22 @@ class AdminController
         $this->productModel = new Product();
         $this->categoryModel = new Category();
         $this->brandModel = new Brand();
-        $this->settingsModel = new Settings();
+        // Settings model is lazy-loaded to avoid errors during login
+        $this->settingsModel = null;
         $this->productSyncService = new ProductSyncService();
         $this->pricingService = new PricingService();
         $this->db = Database::getConnection();
+    }
+
+    /**
+     * Get settings model instance (lazy-loaded)
+     */
+    private function getSettingsModel()
+    {
+        if ($this->settingsModel === null) {
+            $this->settingsModel = new Settings();
+        }
+        return $this->settingsModel;
     }
 
     /**
@@ -985,7 +997,7 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
         
         try {
-            $settings = $this->settingsModel->getAll();
+            $settings = $this->getSettingsModel()->getAll();
             Response::success($settings);
         } catch (Exception $e) {
             Response::error('Failed to load settings: ' . $e->getMessage(), 500);
@@ -998,7 +1010,7 @@ class AdminController
     public function getPublicSettings()
     {
         try {
-            $allSettings = $this->settingsModel->getAll();
+            $allSettings = $this->getSettingsModel()->getAll();
             
             // Only return public-facing settings
             $publicSettings = [
@@ -1039,8 +1051,8 @@ class AdminController
                 }
             }
             
-            $this->settingsModel->updateMultiple($sanitized);
-            $updatedSettings = $this->settingsModel->getAll();
+            $this->getSettingsModel()->updateMultiple($sanitized);
+            $updatedSettings = $this->getSettingsModel()->getAll();
             
             Response::success($updatedSettings, 'Settings updated successfully');
         } catch (Exception $e) {
