@@ -233,6 +233,16 @@ class TestDatabase
             description TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        
+        CREATE TABLE IF NOT EXISTS product_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            image_url VARCHAR(500) NOT NULL,
+            alt_text VARCHAR(255),
+            sort_order INTEGER DEFAULT 0,
+            is_primary BOOLEAN DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         ";
         
         self::$connection->exec($sql);
