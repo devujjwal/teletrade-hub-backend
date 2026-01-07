@@ -83,6 +83,7 @@ class TestDatabase
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vendor_article_id VARCHAR(100) NOT NULL,
             sku VARCHAR(100),
+            ean VARCHAR(50),
             name VARCHAR(255) NOT NULL,
             category_id INTEGER,
             brand_id INTEGER,
@@ -107,6 +108,7 @@ class TestDatabase
             name VARCHAR(100) NOT NULL,
             slug VARCHAR(100) NOT NULL,
             parent_id INTEGER,
+            is_active BOOLEAN DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
@@ -115,6 +117,7 @@ class TestDatabase
             name VARCHAR(100) NOT NULL,
             slug VARCHAR(100) NOT NULL,
             logo_url VARCHAR(255),
+            is_active BOOLEAN DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         

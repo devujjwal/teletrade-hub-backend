@@ -101,10 +101,6 @@ class Product
         $params[':limit'] = (int)$limit;
         $params[':offset'] = (int)$offset;
 
-        // DEBUG: Log the query and parameters
-        error_log("Product SQL: " . $sql);
-        error_log("Product Params: " . print_r($params, true));
-
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
 
