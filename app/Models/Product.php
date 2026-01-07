@@ -78,9 +78,10 @@ class Product
 
         // Filter by product source (vendor or own)
         // CRITICAL: This filter must work correctly to separate vendor and own products
-        if (isset($filters['product_source']) && $filters['product_source'] !== '' && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
+        // Only apply filter if explicitly set to 'vendor' or 'own'
+        if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
             $sql .= " AND product_source = :product_source";
-            $params[':product_source'] = $filters['product_source'];
+            $params[':product_source'] = (string)$filters['product_source']; // Ensure string type
         }
 
         // Search query
@@ -148,9 +149,10 @@ class Product
             $sql .= " AND is_available = :is_available";
             $params[':is_available'] = $filters['is_available'];
         }
-        if (isset($filters['product_source']) && $filters['product_source'] !== '' && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
+        // Filter by product source - only apply if explicitly set to 'vendor' or 'own'
+        if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
             $sql .= " AND product_source = :product_source";
-            $params[':product_source'] = $filters['product_source'];
+            $params[':product_source'] = (string)$filters['product_source']; // Ensure string type
         }
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';
