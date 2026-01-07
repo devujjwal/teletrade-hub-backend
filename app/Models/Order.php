@@ -120,7 +120,7 @@ class Order
         $sql = "UPDATE orders SET 
                 payment_status = :payment_status,
                 payment_transaction_id = :transaction_id,
-                paid_at = CASE WHEN :payment_status = 'paid' THEN NOW() ELSE paid_at END
+                paid_at = CASE WHEN :payment_status = 'paid' THEN CURRENT_TIMESTAMP ELSE paid_at END
                 WHERE id = :id";
         
         $stmt = $this->db->prepare($sql);
@@ -138,7 +138,7 @@ class Order
     {
         $sql = "UPDATE orders SET 
                 vendor_order_id = :vendor_order_id,
-                vendor_order_created_at = NOW(),
+                vendor_order_created_at = CURRENT_TIMESTAMP,
                 status = 'vendor_ordered'
                 WHERE id = :id";
         
