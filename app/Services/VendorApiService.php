@@ -205,14 +205,16 @@ class VendorApiService
             return $decoded;
         }
         
-        // Fallback: Try unserialize for old API format
-        $unserialized = @unserialize($response);
-        if ($unserialized !== false) {
-            return $unserialized;
-        }
+        // SECURITY FIX: Removed unserialize() - CRITICAL VULNERABILITY
+        // Unserialize can lead to remote code execution if vendor response is compromised
+        // If vendor doesn't return JSON, log error and fail gracefully
+        error_log("Vendor API returned non-JSON response for $endpoint: " . substr($response, 0, 200));
         
-        // Return raw response if neither works
-        return ['raw' => $response];
+        // Return raw response with warning
+        return [
+            'error' => 'Invalid response format from vendor API',
+            'raw' => substr($response, 0, 500) // Limit raw response size
+        ];
     }
 
     /**
