@@ -177,13 +177,39 @@ class ProductSyncService
                 // Extract translated fields
                 $properties = $translatedProduct['properties'] ?? [];
                 $productName = $properties['full_name'] ?? ($translatedProduct['model'] ?? null);
-                $categoryName = $translatedProduct['cat_name'] ?? $translatedProduct['category'] ?? null;
-
-                // Update only language-specific columns
+                // Handle case where cat_name might be empty but category has value
+                $categoryName = !empty($translatedProduct['cat_name']) ? $translatedProduct['cat_name'] : ($translatedProduct['category'] ?? null);
+                
+                // Get color from vendor product (language-specific)
+                $translatedColor = $translatedProduct['color'] ?? null;
+                
+                // Update language-specific columns
                 $updateData = [
                     "name_{$langCode}" => $productName,
                     "description_{$langCode}" => null, // Vendor doesn't provide description
                 ];
+                
+                // Store color translation in specifications JSON
+                // We'll store color translations in the specifications JSON field
+                $specifications = json_decode($existingProduct['specifications'] ?? '{}', true);
+                if (!is_array($specifications)) {
+                    $specifications = [];
+                }
+                
+                // Store color translations in specifications
+                if ($translatedColor) {
+                    if (!isset($specifications['color_translations'])) {
+                        $specifications['color_translations'] = [];
+                    }
+                    $specifications['color_translations'][$langCode] = $translatedColor;
+                    
+                    // If this is the base language (English), also update the main color field
+                    if ($langCode === 'en' && empty($existingProduct['color'])) {
+                        $updateData['color'] = $translatedColor;
+                    }
+                    
+                    $updateData['specifications'] = json_encode($specifications);
+                }
 
                 $this->productModel->update($existingProduct['id'], $updateData);
                 
@@ -240,6 +266,29 @@ class ProductSyncService
             if (empty($normalized[':slug']) && empty($existingProduct['slug']) && $languageId == 1) {
                 $normalized[':slug'] = $this->generateSlug($normalized[':name']);
             }
+            
+            // Merge color translations if updating with new language data
+            if (!empty($normalized[':specifications']) && !empty($existingProduct['specifications'])) {
+                $existingSpecs = json_decode($existingProduct['specifications'], true);
+                $newSpecs = json_decode($normalized[':specifications'], true);
+                
+                if (is_array($existingSpecs) && is_array($newSpecs)) {
+                    // Merge color translations
+                    if (isset($newSpecs['color_translations'])) {
+                        if (!isset($existingSpecs['color_translations'])) {
+                            $existingSpecs['color_translations'] = [];
+                        }
+                        $existingSpecs['color_translations'] = array_merge(
+                            $existingSpecs['color_translations'],
+                            $newSpecs['color_translations']
+                        );
+                    }
+                    // Merge other properties
+                    $existingSpecs = array_merge($existingSpecs, $newSpecs);
+                    $normalized[':specifications'] = json_encode($existingSpecs);
+                }
+            }
+            
             // Update existing product
             $this->productModel->update($existingProduct['id'], $normalized);
             $stats['updated']++;
@@ -278,8 +327,9 @@ class ProductSyncService
         }
 
         // Get or create category from 'cat_name' or 'category' field
+        // Handle case where cat_name might be empty but category has value
         $categoryId = null;
-        $categoryName = $vendorProduct['cat_name'] ?? $vendorProduct['category'] ?? null;
+        $categoryName = !empty($vendorProduct['cat_name']) ? $vendorProduct['cat_name'] : ($vendorProduct['category'] ?? null);
         if (!empty($categoryName)) {
             $categoryId = $this->getOrCreateCategory([
                 'id' => $vendorProduct['category'] ?? $categoryName,
@@ -317,6 +367,21 @@ class ProductSyncService
         $ram = $this->extractRAM($productName, $properties);
         $ean = $properties['ean'] ?? $vendorProduct['ean'] ?? null;
 
+        // Build specifications JSON with color translations
+        $specifications = $properties;
+        if (!is_array($specifications)) {
+            $specifications = [];
+        }
+        
+        // Store color translation in specifications
+        $colorValue = $vendorProduct['color'] ?? null;
+        if ($colorValue) {
+            if (!isset($specifications['color_translations'])) {
+                $specifications['color_translations'] = [];
+            }
+            $specifications['color_translations'][$langCode] = $colorValue;
+        }
+        
         // Build data array with language-specific columns
         $data = [
             ':vendor_article_id' => $vendorProduct['sku'], // TRIEL uses 'sku' as unique ID
@@ -334,10 +399,11 @@ class ProductSyncService
             ':is_available' => $stockQuantity > 0 ? 1 : 0,
             ':weight' => null,
             ':dimensions' => null,
-            ':color' => $vendorProduct['color'] ?? null,
+            // Store base color (English) in main color field, translations in specifications
+            ':color' => ($langCode === 'en' && $colorValue) ? $colorValue : null,
             ':storage' => $storage,
             ':ram' => $ram,
-            ':specifications' => !empty($properties) ? json_encode($properties) : null,
+            ':specifications' => !empty($specifications) ? json_encode($specifications) : null,
             ':last_synced_at' => date('Y-m-d H:i:s')
         ];
         
@@ -346,7 +412,18 @@ class ProductSyncService
             $data[':slug'] = $slug;
         }
         
-        // Add language-specific name column
+        // Initialize all language-specific columns to NULL
+        $supportedLanguages = ['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'];
+        foreach ($supportedLanguages as $lang) {
+            if (!isset($data[":name_{$lang}"])) {
+                $data[":name_{$lang}"] = null;
+            }
+            if (!isset($data[":description_{$lang}"])) {
+                $data[":description_{$lang}"] = null;
+            }
+        }
+        
+        // Set current language-specific name column
         $data[":name_{$langCode}"] = $productName;
         $data[":description_{$langCode}"] = null; // Vendor doesn't provide descriptions
 

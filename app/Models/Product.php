@@ -219,18 +219,23 @@ class Product
 
     /**
      * Create new product
+     * Supports all language-specific columns
      */
     public function create($data)
     {
         $sql = "INSERT INTO products (
-            vendor_article_id, sku, ean, name, name_de, name_en, name_sk,
-            description, description_de, description_en, description_sk,
+            vendor_article_id, sku, ean, name, 
+            name_en, name_de, name_sk, name_fr, name_es, name_ru, name_it, name_tr, name_ro, name_pl,
+            description, description_en, description_de, description_sk, 
+            description_fr, description_es, description_ru, description_it, description_tr, description_ro, description_pl,
             category_id, brand_id, warranty_id, base_price, price, currency,
             stock_quantity, available_quantity, is_available, weight, dimensions,
             color, storage, ram, specifications, slug, last_synced_at
         ) VALUES (
-            :vendor_article_id, :sku, :ean, :name, :name_de, :name_en, :name_sk,
-            :description, :description_de, :description_en, :description_sk,
+            :vendor_article_id, :sku, :ean, :name, 
+            :name_en, :name_de, :name_sk, :name_fr, :name_es, :name_ru, :name_it, :name_tr, :name_ro, :name_pl,
+            :description, :description_en, :description_de, :description_sk, 
+            :description_fr, :description_es, :description_ru, :description_it, :description_tr, :description_ro, :description_pl,
             :category_id, :brand_id, :warranty_id, :base_price, :price, :currency,
             :stock_quantity, :available_quantity, :is_available, :weight, :dimensions,
             :color, :storage, :ram, :specifications, :slug, :last_synced_at
@@ -247,10 +252,14 @@ class Product
      */
     public function update($id, $data)
     {
-        // Whitelist of updatable fields
+        // Whitelist of updatable fields (includes all language-specific columns)
         $allowedFields = [
-            'vendor_article_id', 'sku', 'ean', 'name', 'name_de', 'name_en', 'name_sk',
-            'description', 'description_de', 'description_en', 'description_sk',
+            'vendor_article_id', 'sku', 'ean', 'name', 
+            'name_en', 'name_de', 'name_sk', 'name_fr', 'name_es', 'name_ru', 
+            'name_it', 'name_tr', 'name_ro', 'name_pl',
+            'description', 'description_en', 'description_de', 'description_sk', 
+            'description_fr', 'description_es', 'description_ru', 'description_it', 
+            'description_tr', 'description_ro', 'description_pl',
             'category_id', 'brand_id', 'warranty_id', 'base_price', 'price', 'currency',
             'stock_quantity', 'available_quantity', 'is_available', 'is_featured', 'weight', 
             'dimensions', 'color', 'storage', 'ram', 'specifications', 'slug', 'last_synced_at'
@@ -370,6 +379,24 @@ class Product
                     'category_name', 
                     $fallbackChain
                 );
+            }
+            
+            // Apply color translation from specifications if available
+            if (!empty($product['specifications'])) {
+                $specs = is_string($product['specifications']) 
+                    ? json_decode($product['specifications'], true) 
+                    : $product['specifications'];
+                
+                if (is_array($specs) && isset($specs['color_translations'])) {
+                    // Try to get color for current language, fallback to English
+                    $colorTranslations = $specs['color_translations'];
+                    foreach ($fallbackChain as $fallbackLang) {
+                        if (isset($colorTranslations[$fallbackLang])) {
+                            $product['color'] = $colorTranslations[$fallbackLang];
+                            break;
+                        }
+                    }
+                }
             }
             
             // Add language metadata
