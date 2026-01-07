@@ -76,8 +76,11 @@ class Product
 
         // Search query
         if (!empty($filters['search'])) {
-            $sql .= " AND (name LIKE :search OR sku LIKE :search OR ean LIKE :search)";
-            $params[':search'] = '%' . $filters['search'] . '%';
+            $searchValue = '%' . $filters['search'] . '%';
+            $sql .= " AND (name LIKE :search_name OR sku LIKE :search_sku OR ean LIKE :search_ean)";
+            $params[':search_name'] = $searchValue;
+            $params[':search_sku'] = $searchValue;
+            $params[':search_ean'] = $searchValue;
         }
 
         // Featured products
@@ -97,6 +100,10 @@ class Product
         // Add pagination to params
         $params[':limit'] = (int)$limit;
         $params[':offset'] = (int)$offset;
+
+        // DEBUG: Log the query and parameters
+        error_log("Product SQL: " . $sql);
+        error_log("Product Params: " . print_r($params, true));
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
