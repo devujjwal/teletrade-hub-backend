@@ -1,7 +1,16 @@
 {
     "name": "teletrade-hub/backend",
-    "description": "TeleTrade Hub Backend API",
+    "description": "TeleTrade Hub Backend API - Production-grade e-commerce platform",
     "type": "project",
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "TeleTrade Hub Development Team",
+            "email": "dev@teletrade-hub.com"
+        }
+    ],
+    "keywords": ["ecommerce", "api", "backend", "rest-api", "php"],
+    "homepage": "https://github.com/devujjwal/teletrade-hub-backend",
     "require": {
         "php": ">=8.3",
         "ext-pdo": "*",
@@ -37,6 +46,13 @@
         "test:integration": "phpunit --testsuite 'Integration Tests'",
         "test:e2e": "phpunit --testsuite 'E2E Tests'",
         "test:coverage": "phpunit --coverage-html tests/coverage"
-    }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "preferred-install": "dist"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }
 
