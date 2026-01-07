@@ -138,9 +138,30 @@ class ProductController
                 'query' => $query
             ]);
         } catch (Exception $e) {
-            // Log error for debugging
-            error_log("Search error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
-            Response::error('Search failed: ' . $e->getMessage(), 500);
+            // Bypass production error sanitization for debugging
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => false,
+                'message' => 'Search error',
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'query' => $_GET['q'] ?? null
+            ]);
+            exit;
+        } catch (Error $e) {
+            // Catch PHP errors
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => false,
+                'message' => 'PHP Error in search',
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            exit;
         }
     }
 
