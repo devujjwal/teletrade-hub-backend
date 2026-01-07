@@ -223,9 +223,34 @@ class TestDatabase
             value TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        
+        CREATE TABLE IF NOT EXISTS warranties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(255) NOT NULL,
+            duration_months INTEGER,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         ";
         
         self::$connection->exec($sql);
+        
+        // Create product_list_view (SQLite compatible)
+        self::$connection->exec("
+            CREATE VIEW IF NOT EXISTS product_list_view AS
+            SELECT 
+                p.id, p.vendor_article_id, p.sku, p.name, p.color, p.storage, p.ram,
+                p.base_price, p.price, p.currency, p.stock_quantity, p.available_quantity,
+                p.is_available, p.is_featured, p.created_at, p.updated_at,
+                c.id AS category_id, c.name AS category_name, c.slug AS category_slug,
+                b.id AS brand_id, b.name AS brand_name, b.slug AS brand_slug,
+                w.id AS warranty_id, w.name AS warranty_name, w.duration_months AS warranty_months,
+                NULL AS primary_image
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN brands b ON p.brand_id = b.id
+            LEFT JOIN warranties w ON p.warranty_id = w.id
+        ");
         
         // Insert default pricing rule
         self::$connection->exec("

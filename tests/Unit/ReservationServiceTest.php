@@ -333,6 +333,12 @@ class ReservationServiceTest extends TestCase
  */
 class ReservationServiceMock extends ReservationService
 {
+    // PHP 8.3 requires explicit property declarations
+    protected $vendorApi;
+    protected $reservationModel;
+    protected $productModel;
+    protected $db;
+    
     public function __construct()
     {
         $this->vendorApi = new VendorApiServiceMock();

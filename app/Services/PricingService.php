@@ -21,10 +21,13 @@ class PricingService
         $markup = $this->getApplicableMarkup($categoryId, $brandId, $productId);
         
         if ($markup['type'] === 'percentage') {
-            return $basePrice * (1 + ($markup['value'] / 100));
+            $price = $basePrice * (1 + ($markup['value'] / 100));
         } else {
-            return $basePrice + $markup['value'];
+            $price = $basePrice + $markup['value'];
         }
+        
+        // Round to 2 decimal places to avoid floating point precision issues
+        return round($price, 2);
     }
 
     /**

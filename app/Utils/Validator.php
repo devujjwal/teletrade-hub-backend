@@ -77,7 +77,7 @@ class Validator
      */
     public static function phone($phone)
     {
-        return preg_match('/^[0-9+\-\s()]+$/', $phone);
+        return (bool) preg_match('/^[0-9+\-\s()]+$/', $phone);
     }
 
     /**
