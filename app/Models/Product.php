@@ -135,8 +135,11 @@ class Product
             $params[':is_available'] = $filters['is_available'];
         }
         if (!empty($filters['search'])) {
-            $sql .= " AND (name LIKE :search OR sku LIKE :search OR ean LIKE :search)";
-            $params[':search'] = '%' . $filters['search'] . '%';
+            $searchValue = '%' . $filters['search'] . '%';
+            $sql .= " AND (name LIKE :search_name OR sku LIKE :search_sku OR ean LIKE :search_ean)";
+            $params[':search_name'] = $searchValue;
+            $params[':search_sku'] = $searchValue;
+            $params[':search_ean'] = $searchValue;
         }
 
         $stmt = $this->db->prepare($sql);
