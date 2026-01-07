@@ -85,11 +85,11 @@ class Product
             $sql .= " AND is_featured = 1";
         }
 
-        // Sorting
+        // Sorting - SECURITY: Use whitelist to prevent SQL injection
         $allowedSort = ['price', 'name', 'created_at', 'stock_quantity'];
-        $sortBy = in_array($filters['sort'] ?? '', $allowedSort) ? $filters['sort'] : 'created_at';
+        $sortBy = in_array($filters['sort'] ?? '', $allowedSort, true) ? $filters['sort'] : 'created_at';
         $sortOrder = strtoupper($filters['order'] ?? 'DESC') === 'ASC' ? 'ASC' : 'DESC';
-        $sql .= " ORDER BY $sortBy $sortOrder";
+        $sql .= " ORDER BY " . $sortBy . " " . $sortOrder;
 
         // Pagination
         $sql .= " LIMIT :limit OFFSET :offset";
@@ -206,15 +206,35 @@ class Product
 
     /**
      * Update product
+     * SECURITY: Whitelist allowed fields to prevent mass assignment
      */
     public function update($id, $data)
     {
+        // Whitelist of updatable fields
+        $allowedFields = [
+            'vendor_article_id', 'sku', 'ean', 'name', 'name_de', 'name_en', 'name_sk',
+            'description', 'description_de', 'description_en', 'description_sk',
+            'category_id', 'brand_id', 'warranty_id', 'base_price', 'price', 'currency',
+            'stock_quantity', 'available_quantity', 'is_available', 'is_featured', 'weight', 
+            'dimensions', 'color', 'storage', 'ram', 'specifications', 'slug', 'last_synced_at'
+        ];
+        
         $fields = [];
         $params = [':id' => $id];
 
         foreach ($data as $key => $value) {
-            $fields[] = "$key = :$key";
-            $params[":$key"] = $value;
+            // Remove : prefix if present
+            $cleanKey = ltrim($key, ':');
+            
+            // Only allow whitelisted fields
+            if (in_array($cleanKey, $allowedFields, true)) {
+                $fields[] = "`$cleanKey` = :$cleanKey";
+                $params[":$cleanKey"] = $value;
+            }
+        }
+
+        if (empty($fields)) {
+            return false;
         }
 
         $sql = "UPDATE products SET " . implode(', ', $fields) . " WHERE id = :id";
@@ -321,10 +341,17 @@ class Product
 
     /**
      * Get unique values for a field
+     * SECURITY: Whitelist allowed fields to prevent SQL injection
      */
     private function getUniqueValues($field)
     {
-        $sql = "SELECT DISTINCT $field FROM products WHERE $field IS NOT NULL AND is_available = 1 ORDER BY $field";
+        // Whitelist allowed fields
+        $allowedFields = ['color', 'storage', 'ram'];
+        if (!in_array($field, $allowedFields, true)) {
+            return [];
+        }
+        
+        $sql = "SELECT DISTINCT `$field` FROM products WHERE `$field` IS NOT NULL AND is_available = 1 ORDER BY `$field`";
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
