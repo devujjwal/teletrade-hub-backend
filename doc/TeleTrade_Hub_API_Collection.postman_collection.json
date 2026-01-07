@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "teletrade-hub-api-v1",
 		"name": "TeleTrade Hub API",
-		"description": "Complete API collection for TeleTrade Hub - Telecommunication Trading e.K.\n\nBase URL: https://api.vs-mjrinfotech.com\nVersion: 1.0.0\nLast Updated: January 7, 2026",
+		"description": "Complete API collection for TeleTrade Hub - Telecommunication Trading e.K.\n\nBase URL: https://api.vs-mjrinfotech.com\nVersion: 1.0.1\nLast Updated: January 7, 2026",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -103,6 +103,26 @@
 				}
 			],
 			"description": "Customer authentication endpoints"
+		},
+		{
+			"name": "Languages",
+			"item": [
+				{
+					"name": "Get All Languages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/languages",
+							"host": ["{{base_url}}"],
+							"path": ["languages"]
+						},
+						"description": "Get all supported languages"
+					},
+					"response": []
+				}
+			],
+			"description": "Language endpoints"
 		},
 		{
 			"name": "Products",
