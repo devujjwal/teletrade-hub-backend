@@ -104,11 +104,30 @@ class ProductSyncService
     {
         $stockData = $this->vendorApi->getStock($languageId);
 
+        // Check for API errors
+        if (isset($stockData['error']) && $stockData['error'] != 0) {
+            $errorMsg = $stockData['error_msg'] ?? 'Unknown vendor API error';
+            throw new Exception("Vendor API error: {$errorMsg}");
+        }
+
         if (empty($stockData) || !isset($stockData['stock'])) {
             throw new Exception('Invalid stock data received from vendor');
         }
 
         $products = $stockData['stock'];
+        $productCount = is_array($products) ? count($products) : 0;
+        echo "Found {$productCount} products in vendor response\n";
+        
+        if ($productCount == 0) {
+            echo "WARNING: No products to sync!\n";
+            return [
+                'synced' => 0,
+                'added' => 0,
+                'updated' => 0,
+                'products' => []
+            ];
+        }
+        
         $stats = [
             'synced' => 0,
             'added' => 0,
@@ -117,15 +136,27 @@ class ProductSyncService
         ];
 
         // Process each product
+        $errorCount = 0;
         foreach ($products as $vendorProduct) {
             try {
                 $this->syncSingleProduct($vendorProduct, $stats, $languageId);
                 $stats['products'][] = $vendorProduct;
             } catch (Exception $e) {
+                $errorCount++;
                 $productId = $vendorProduct['sku'] ?? $vendorProduct['id'] ?? 'unknown';
-                error_log("Failed to sync product {$productId}: " . $e->getMessage());
+                $errorMsg = "Failed to sync product {$productId}: " . $e->getMessage();
+                error_log($errorMsg);
+                echo "ERROR: {$errorMsg}\n";
+                // Log first 5 errors in detail
+                if ($errorCount <= 5) {
+                    echo "Stack trace: " . $e->getTraceAsString() . "\n";
+                }
                 continue;
             }
+        }
+        
+        if ($errorCount > 0) {
+            echo "Total errors during sync: {$errorCount}\n";
         }
 
         return $stats;
@@ -248,8 +279,14 @@ class ProductSyncService
      */
     private function syncSingleProduct($vendorProduct, &$stats, $languageId = 1)
     {
-        // Normalize vendor data
-        $normalized = $this->normalizeVendorProduct($vendorProduct, $languageId);
+        $sku = $vendorProduct['sku'] ?? 'unknown';
+        
+        try {
+            // Normalize vendor data
+            $normalized = $this->normalizeVendorProduct($vendorProduct, $languageId);
+        } catch (Exception $e) {
+            throw new Exception("Failed to normalize product {$sku}: " . $e->getMessage());
+        }
         
         // CRITICAL: Ensure product_source is set to 'vendor' for all synced products
         $normalized[':product_source'] = 'vendor';
@@ -301,15 +338,26 @@ class ProductSyncService
             }
             
             // Update existing product
-            $this->productModel->update($existingProduct['id'], $normalized);
-            $stats['updated']++;
+            try {
+                $this->productModel->update($existingProduct['id'], $normalized);
+                $stats['updated']++;
+            } catch (Exception $e) {
+                throw new Exception("Failed to update product {$sku} (ID: {$existingProduct['id']}): " . $e->getMessage());
+            }
             
             // Update images
             $this->syncProductImages($existingProduct['id'], $productImages);
         } else {
             // Create new product
-            $productId = $this->productModel->create($normalized);
-            $stats['added']++;
+            try {
+                $productId = $this->productModel->create($normalized);
+                if (!$productId) {
+                    throw new Exception("Product creation returned no ID for SKU: {$sku}");
+                }
+                $stats['added']++;
+            } catch (Exception $e) {
+                throw new Exception("Failed to create product {$sku}: " . $e->getMessage());
+            }
             
             // Add images
             $this->syncProductImages($productId, $productImages);
