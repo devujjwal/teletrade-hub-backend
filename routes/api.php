@@ -161,6 +161,9 @@ $router->get('categories/{slug}/products', 'ProductController', 'productsByCateg
 $router->get('brands', 'ProductController', 'brands');
 $router->get('brands/{slug}/products', 'ProductController', 'productsByBrand');
 
+// Public Settings (for footer, contact page, etc.)
+$router->get('settings/public', 'AdminController', 'getPublicSettings');
+
 // Orders (Customer)
 $router->post('orders', 'OrderController', 'create');
 $router->get('orders/{orderId}', 'OrderController', 'show');
@@ -212,6 +215,10 @@ $router->delete('admin/brands/{id}', 'AdminController', 'deleteBrand');
 
 // Admin Vendor Orders
 $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSalesOrder');
+
+// Admin Settings
+$router->get('admin/settings', 'AdminController', 'getSettings');
+$router->put('admin/settings', 'AdminController', 'updateSettings');
 
 // Debug Routes (Temporary - Remove in production)
 $router->get('admin/debug/database', 'AdminController', 'debugDatabase');

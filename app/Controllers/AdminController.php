@@ -9,8 +9,10 @@ require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
+require_once __DIR__ . '/../Models/Settings.php';
 require_once __DIR__ . '/../Utils/Language.php';
 require_once __DIR__ . '/../Utils/Sanitizer.php';
+require_once __DIR__ . '/../Utils/Database.php';
 
 /**
  * Admin Controller
@@ -25,6 +27,7 @@ class AdminController
     private $productModel;
     private $categoryModel;
     private $brandModel;
+    private $settingsModel;
     private $productSyncService;
     private $pricingService;
     private $db;
@@ -38,6 +41,7 @@ class AdminController
         $this->productModel = new Product();
         $this->categoryModel = new Category();
         $this->brandModel = new Brand();
+        $this->settingsModel = new Settings();
         $this->productSyncService = new ProductSyncService();
         $this->pricingService = new PricingService();
         $this->db = Database::getConnection();
@@ -385,6 +389,24 @@ class AdminController
         if (!empty($_GET['product_source']) && in_array($_GET['product_source'], ['vendor', 'own'], true)) {
             $filters['product_source'] = $_GET['product_source']; // Use raw value, already validated
         }
+        // Filter by category - check if set and not empty string
+        if (isset($_GET['category_id']) && $_GET['category_id'] !== '' && $_GET['category_id'] !== 'all') {
+            $categoryId = intval($_GET['category_id']);
+            if ($categoryId > 0) {
+                $filters['category_id'] = $categoryId;
+            }
+        }
+        // Filter by brand - check if set and not empty string
+        if (isset($_GET['brand_id']) && $_GET['brand_id'] !== '' && $_GET['brand_id'] !== 'all') {
+            $brandId = intval($_GET['brand_id']);
+            if ($brandId > 0) {
+                $filters['brand_id'] = $brandId;
+            }
+        }
+        // Filter by featured status
+        if (isset($_GET['is_featured']) && $_GET['is_featured'] !== '' && $_GET['is_featured'] !== 'all') {
+            $filters['is_featured'] = ($_GET['is_featured'] === '1' || $_GET['is_featured'] === 1) ? 1 : 0;
+        }
 
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $total = $this->productModel->count($filters);
@@ -678,15 +700,25 @@ class AdminController
         
         $input = json_decode(file_get_contents('php://input'), true);
 
-        if (empty($input['name']) || empty($input['slug'])) {
-            Response::error('Name and slug are required', 400);
+        if (empty($input['name'])) {
+            Response::error('Name is required', 400);
         }
 
         try {
+            $name = Sanitizer::string($input['name']);
+            
+            // Auto-generate slug from name
+            $slug = $this->generateSlug($name, 'categories');
+            
+            // Check if slug already exists
+            if ($this->slugExists($slug, 'categories')) {
+                Response::error('A category with a similar name already exists. Please use a different name.', 409);
+            }
+
             $data = [
                 ':vendor_id' => null,
-                ':name' => Sanitizer::string($input['name']),
-                ':slug' => Sanitizer::string($input['slug']),
+                ':name' => $name,
+                ':slug' => $slug,
                 ':parent_id' => !empty($input['parent_id']) ? intval($input['parent_id']) : null,
                 ':description' => $input['description'] ?? null,
                 ':image_url' => null,
@@ -696,7 +728,7 @@ class AdminController
 
             // Initialize all language fields
             foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
-                $data[":name_{$lang}"] = $input["name_{$lang}"] ?? ($lang === 'en' ? $input['name'] : null);
+                $data[":name_{$lang}"] = $input["name_{$lang}"] ?? ($lang === 'en' ? $name : null);
             }
 
             $categoryId = $this->categoryModel->create($data);
@@ -704,6 +736,10 @@ class AdminController
             
             Response::success(['category' => $category], 'Category created successfully');
         } catch (Exception $e) {
+            // Check if it's a duplicate entry error
+            if (strpos($e->getMessage(), 'Duplicate entry') !== false || strpos($e->getMessage(), 'UNIQUE constraint') !== false) {
+                Response::error('A category with a similar name already exists. Please use a different name.', 409);
+            }
             Response::error('Failed to create category: ' . $e->getMessage(), 500);
         }
     }
@@ -797,15 +833,25 @@ class AdminController
         
         $input = json_decode(file_get_contents('php://input'), true);
 
-        if (empty($input['name']) || empty($input['slug'])) {
-            Response::error('Name and slug are required', 400);
+        if (empty($input['name'])) {
+            Response::error('Name is required', 400);
         }
 
         try {
+            $name = Sanitizer::string($input['name']);
+            
+            // Auto-generate slug from name
+            $slug = $this->generateSlug($name, 'brands');
+            
+            // Check if slug already exists
+            if ($this->slugExists($slug, 'brands')) {
+                Response::error('A brand with a similar name already exists. Please use a different name.', 409);
+            }
+
             $data = [
                 ':vendor_id' => null,
-                ':name' => Sanitizer::string($input['name']),
-                ':slug' => Sanitizer::string($input['slug']),
+                ':name' => $name,
+                ':slug' => $slug,
                 ':logo_url' => $input['logo_url'] ?? null,
                 ':description' => $input['description'] ?? null,
                 ':website' => $input['website'] ?? null,
@@ -817,6 +863,10 @@ class AdminController
             
             Response::success(['brand' => $brand], 'Brand created successfully');
         } catch (Exception $e) {
+            // Check if it's a duplicate entry error
+            if (strpos($e->getMessage(), 'Duplicate entry') !== false || strpos($e->getMessage(), 'UNIQUE constraint') !== false) {
+                Response::error('A brand with a similar name already exists. Please use a different name.', 409);
+            }
             Response::error('Failed to create brand: ' . $e->getMessage(), 500);
         }
     }
@@ -860,6 +910,45 @@ class AdminController
     }
 
     /**
+     * Generate URL-friendly slug
+     */
+    private function generateSlug($text, $table = 'categories')
+    {
+        $text = preg_replace('~[^\pL\d]+~u', '-', $text);
+        $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
+        $text = preg_replace('~[^-\w]+~', '', $text);
+        $text = trim($text, '-');
+        $text = preg_replace('~-+~', '-', $text);
+        $text = strtolower($text);
+
+        if (empty($text)) {
+            return $table . '-' . uniqid();
+        }
+
+        // Ensure uniqueness
+        $slug = $text;
+        $counter = 1;
+        
+        while ($this->slugExists($slug, $table)) {
+            $slug = $text . '-' . $counter;
+            $counter++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Check if slug exists in table
+     */
+    private function slugExists($slug, $table = 'categories')
+    {
+        $sql = "SELECT COUNT(*) FROM {$table} WHERE slug = :slug";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':slug' => $slug]);
+        return $stmt->fetchColumn() > 0;
+    }
+
+    /**
      * Delete brand (only if not used by in-house products)
      */
     public function deleteBrand($id)
@@ -887,14 +976,74 @@ class AdminController
     }
 
     /**
-     * Generate slug from string
+     * Get settings (admin only - returns all settings)
      */
-    private function generateSlug($string)
+    public function getSettings()
     {
-        $string = strtolower(trim($string));
-        $string = preg_replace('/[^a-z0-9-]/', '-', $string);
-        $string = preg_replace('/-+/', '-', $string);
-        return trim($string, '-');
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        try {
+            $settings = $this->settingsModel->getAll();
+            Response::success($settings);
+        } catch (Exception $e) {
+            Response::error('Failed to load settings: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get public settings (no auth required - returns only public fields)
+     */
+    public function getPublicSettings()
+    {
+        try {
+            $allSettings = $this->settingsModel->getAll();
+            
+            // Only return public-facing settings
+            $publicSettings = [
+                'site_name' => $allSettings['site_name'] ?? 'TeleTrade Hub',
+                'site_email' => $allSettings['site_email'] ?? '',
+                'address' => $allSettings['address'] ?? '',
+                'contact_number' => $allSettings['contact_number'] ?? '',
+                'whatsapp_number' => $allSettings['whatsapp_number'] ?? '',
+            ];
+            
+            Response::success($publicSettings);
+        } catch (Exception $e) {
+            Response::error('Failed to load settings: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Update settings
+     */
+    public function updateSettings()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input || !is_array($input)) {
+            Response::error('Invalid request data', 400);
+        }
+
+        try {
+            // Sanitize string values
+            $sanitized = [];
+            foreach ($input as $key => $value) {
+                if (is_string($value)) {
+                    $sanitized[$key] = Sanitizer::string($value);
+                } else {
+                    $sanitized[$key] = $value;
+                }
+            }
+            
+            $this->settingsModel->updateMultiple($sanitized);
+            $updatedSettings = $this->settingsModel->getAll();
+            
+            Response::success($updatedSettings, 'Settings updated successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to update settings: ' . $e->getMessage(), 500);
+        }
     }
 }
 

@@ -25,15 +25,15 @@ class Product
         $sql = "SELECT * FROM product_list_view WHERE 1=1";
 
         // Filter by category
-        if (!empty($filters['category_id'])) {
+        if (isset($filters['category_id']) && $filters['category_id'] > 0) {
             $sql .= " AND category_id = :category_id";
-            $params[':category_id'] = $filters['category_id'];
+            $params[':category_id'] = intval($filters['category_id']);
         }
 
         // Filter by brand
-        if (!empty($filters['brand_id'])) {
+        if (isset($filters['brand_id']) && $filters['brand_id'] > 0) {
             $sql .= " AND brand_id = :brand_id";
-            $params[':brand_id'] = $filters['brand_id'];
+            $params[':brand_id'] = intval($filters['brand_id']);
         }
 
         // Filter by availability
@@ -94,8 +94,9 @@ class Product
         }
 
         // Featured products
-        if (!empty($filters['is_featured'])) {
-            $sql .= " AND is_featured = 1";
+        if (isset($filters['is_featured'])) {
+            $sql .= " AND is_featured = :is_featured";
+            $params[':is_featured'] = $filters['is_featured'];
         }
 
         // Sorting - SECURITY: Use whitelist to prevent SQL injection
@@ -140,15 +141,16 @@ class Product
     public function count($filters = [])
     {
         $params = [];
-        $sql = "SELECT COUNT(*) FROM products WHERE 1=1";
+        // Use product_list_view to match the same structure as getAll()
+        $sql = "SELECT COUNT(*) FROM product_list_view WHERE 1=1";
 
-        if (!empty($filters['category_id'])) {
+        if (isset($filters['category_id']) && $filters['category_id'] > 0) {
             $sql .= " AND category_id = :category_id";
-            $params[':category_id'] = $filters['category_id'];
+            $params[':category_id'] = intval($filters['category_id']);
         }
-        if (!empty($filters['brand_id'])) {
+        if (isset($filters['brand_id']) && $filters['brand_id'] > 0) {
             $sql .= " AND brand_id = :brand_id";
-            $params[':brand_id'] = $filters['brand_id'];
+            $params[':brand_id'] = intval($filters['brand_id']);
         }
         if (isset($filters['is_available'])) {
             $sql .= " AND is_available = :is_available";
@@ -165,6 +167,11 @@ class Product
             $params[':search_name'] = $searchValue;
             $params[':search_sku'] = $searchValue;
             $params[':search_ean'] = $searchValue;
+        }
+        // Filter by featured status
+        if (isset($filters['is_featured'])) {
+            $sql .= " AND is_featured = :is_featured";
+            $params[':is_featured'] = $filters['is_featured'];
         }
 
         $stmt = $this->db->prepare($sql);
