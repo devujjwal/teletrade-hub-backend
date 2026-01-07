@@ -126,7 +126,7 @@ class TestDatabase
             status VARCHAR(50) DEFAULT 'pending',
             payment_status VARCHAR(50) DEFAULT 'unpaid',
             payment_method VARCHAR(50),
-            transaction_id VARCHAR(255),
+            payment_transaction_id VARCHAR(255),
             subtotal DECIMAL(10,2) NOT NULL,
             tax DECIMAL(10,2) NOT NULL,
             shipping_cost DECIMAL(10,2) NOT NULL,
@@ -138,6 +138,7 @@ class TestDatabase
             notes TEXT,
             ip_address VARCHAR(45),
             user_agent VARCHAR(255),
+            paid_at DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
