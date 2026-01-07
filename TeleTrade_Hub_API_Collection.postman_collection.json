@@ -1,0 +1,1009 @@
+{
+	"info": {
+		"_postman_id": "teletrade-hub-api-v1",
+		"name": "TeleTrade Hub API",
+		"description": "Complete API collection for TeleTrade Hub - Telecommunication Trading e.K.\n\nBase URL: https://api.vs-mjrinfotech.com\nVersion: 1.0.0\nLast Updated: January 7, 2026",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://api.vs-mjrinfotech.com",
+			"type": "string"
+		},
+		{
+			"key": "admin_token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health & System",
+			"item": [
+				{
+					"name": "Get API Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": ["{{base_url}}"],
+							"path": [""]
+						},
+						"description": "Get API information and status"
+					},
+					"response": []
+				},
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						},
+						"description": "Check API health status, database connection, and storage"
+					},
+					"response": []
+				}
+			],
+			"description": "System health and status endpoints"
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Customer Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"phone\": \"+491234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new customer account"
+					},
+					"response": []
+				},
+				{
+					"name": "Customer Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Customer login"
+					},
+					"response": []
+				}
+			],
+			"description": "Customer authentication endpoints"
+		},
+		{
+			"name": "Products",
+			"item": [
+				{
+					"name": "Get All Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/products?lang=en&page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["products"],
+							"query": [
+								{
+									"key": "lang",
+									"value": "en",
+									"description": "Language code (en, de)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Items per page (1-100)"
+								},
+								{
+									"key": "category_id",
+									"value": "",
+									"description": "Filter by category ID",
+									"disabled": true
+								},
+								{
+									"key": "brand_id",
+									"value": "",
+									"description": "Filter by brand ID",
+									"disabled": true
+								},
+								{
+									"key": "min_price",
+									"value": "",
+									"description": "Minimum price",
+									"disabled": true
+								},
+								{
+									"key": "max_price",
+									"value": "",
+									"description": "Maximum price",
+									"disabled": true
+								},
+								{
+									"key": "color",
+									"value": "",
+									"description": "Filter by color",
+									"disabled": true
+								},
+								{
+									"key": "storage",
+									"value": "",
+									"description": "Filter by storage (e.g., 128GB)",
+									"disabled": true
+								},
+								{
+									"key": "ram",
+									"value": "",
+									"description": "Filter by RAM (e.g., 8GB)",
+									"disabled": true
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search query",
+									"disabled": true
+								},
+								{
+									"key": "is_available",
+									"value": "",
+									"description": "1 for available only",
+									"disabled": true
+								},
+								{
+									"key": "is_featured",
+									"value": "",
+									"description": "1 for featured only",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "",
+									"description": "Sort field (price, name, created_at)",
+									"disabled": true
+								},
+								{
+									"key": "order",
+									"value": "",
+									"description": "Sort order (asc, desc)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get products list with filters and pagination"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Product by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/products/1?lang=en",
+							"host": ["{{base_url}}"],
+							"path": ["products", "1"],
+							"query": [
+								{
+									"key": "lang",
+									"value": "en",
+									"description": "Language code"
+								}
+							]
+						},
+						"description": "Get single product details by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Search Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/products/search?q=iPhone&page=1&limit=20&lang=en",
+							"host": ["{{base_url}}"],
+							"path": ["products", "search"],
+							"query": [
+								{
+									"key": "q",
+									"value": "iPhone",
+									"description": "Search query (required)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Items per page"
+								},
+								{
+									"key": "lang",
+									"value": "en",
+									"description": "Language code"
+								}
+							]
+						},
+						"description": "Search products by query"
+					},
+					"response": []
+				}
+			],
+			"description": "Product browsing and search endpoints"
+		},
+		{
+			"name": "Categories",
+			"item": [
+				{
+					"name": "Get All Categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/categories?lang=en",
+							"host": ["{{base_url}}"],
+							"path": ["categories"],
+							"query": [
+								{
+									"key": "lang",
+									"value": "en",
+									"description": "Language code"
+								}
+							]
+						},
+						"description": "Get all categories with product count"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Products by Category",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/categories/1/products?page=1&limit=20&lang=en",
+							"host": ["{{base_url}}"],
+							"path": ["categories", "1", "products"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Items per page"
+								},
+								{
+									"key": "lang",
+									"value": "en",
+									"description": "Language code"
+								}
+							]
+						},
+						"description": "Get products by category ID"
+					},
+					"response": []
+				}
+			],
+			"description": "Category endpoints"
+		},
+		{
+			"name": "Brands",
+			"item": [
+				{
+					"name": "Get All Brands",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/brands",
+							"host": ["{{base_url}}"],
+							"path": ["brands"]
+						},
+						"description": "Get all brands with product count"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Products by Brand",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/brands/1/products?page=1&limit=20&lang=en",
+							"host": ["{{base_url}}"],
+							"path": ["brands", "1", "products"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Items per page"
+								},
+								{
+									"key": "lang",
+									"value": "en",
+									"description": "Language code"
+								}
+							]
+						},
+						"description": "Get products by brand ID"
+					},
+					"response": []
+				}
+			],
+			"description": "Brand endpoints"
+		},
+		{
+			"name": "Orders",
+			"item": [
+				{
+					"name": "Create Order (Registered User)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": 1,\n  \"cart_items\": [\n    {\n      \"product_id\": 1,\n      \"quantity\": 2,\n      \"price\": 1299.99\n    },\n    {\n      \"product_id\": 5,\n      \"quantity\": 1,\n      \"price\": 599.99\n    }\n  ],\n  \"billing_address\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"company\": \"Tech Solutions GmbH\",\n    \"address_line1\": \"Hauptstraße 123\",\n    \"address_line2\": \"Apt 4B\",\n    \"city\": \"Berlin\",\n    \"state\": \"Berlin\",\n    \"postal_code\": \"10115\",\n    \"country\": \"DE\",\n    \"phone\": \"+491234567890\"\n  },\n  \"shipping_address\": {\n    \"first_name\": \"Jane\",\n    \"last_name\": \"Doe\",\n    \"company\": \"\",\n    \"address_line1\": \"Friedrichstraße 45\",\n    \"address_line2\": \"\",\n    \"city\": \"Berlin\",\n    \"state\": \"Berlin\",\n    \"postal_code\": \"10117\",\n    \"country\": \"DE\",\n    \"phone\": \"+491234567891\"\n  },\n  \"payment_method\": \"credit_card\",\n  \"notes\": \"Please deliver after 6pm\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders",
+							"host": ["{{base_url}}"],
+							"path": ["orders"]
+						},
+						"description": "Create a new order for registered user"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order (Guest)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"guest_email\": \"guest@example.com\",\n  \"cart_items\": [\n    {\n      \"product_id\": 1,\n      \"quantity\": 1,\n      \"price\": 1299.99\n    }\n  ],\n  \"billing_address\": {\n    \"first_name\": \"Guest\",\n    \"last_name\": \"User\",\n    \"company\": \"\",\n    \"address_line1\": \"Hauptstraße 123\",\n    \"address_line2\": \"\",\n    \"city\": \"Berlin\",\n    \"state\": \"Berlin\",\n    \"postal_code\": \"10115\",\n    \"country\": \"DE\",\n    \"phone\": \"+491234567890\"\n  },\n  \"payment_method\": \"credit_card\",\n  \"notes\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders",
+							"host": ["{{base_url}}"],
+							"path": ["orders"]
+						},
+						"description": "Create a new order for guest user"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Order Details (User)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/orders/ORD-2026-00123?user_id=1",
+							"host": ["{{base_url}}"],
+							"path": ["orders", "ORD-2026-00123"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "1",
+									"description": "For registered user orders"
+								},
+								{
+									"key": "guest_email",
+									"value": "",
+									"description": "For guest orders",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get order details by order number"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Order Details (Guest)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/orders/ORD-2026-00123?guest_email=guest@example.com",
+							"host": ["{{base_url}}"],
+							"path": ["orders", "ORD-2026-00123"],
+							"query": [
+								{
+									"key": "guest_email",
+									"value": "guest@example.com",
+									"description": "Guest email for order verification"
+								}
+							]
+						},
+						"description": "Get order details for guest order"
+					},
+					"response": []
+				},
+				{
+					"name": "Payment Success Callback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"transaction_id\": \"TXN-456789\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/ORD-2026-00123/payment-success",
+							"host": ["{{base_url}}"],
+							"path": ["orders", "ORD-2026-00123", "payment-success"]
+						},
+						"description": "Process successful payment callback"
+					},
+					"response": []
+				},
+				{
+					"name": "Payment Failed Callback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Insufficient funds\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/ORD-2026-00123/payment-failed",
+							"host": ["{{base_url}}"],
+							"path": ["orders", "ORD-2026-00123", "payment-failed"]
+						},
+						"description": "Process failed payment callback"
+					},
+					"response": []
+				}
+			],
+			"description": "Customer order endpoints"
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Authentication",
+					"item": [
+						{
+							"name": "Admin Login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// Save token to collection variable",
+											"if (pm.response.code === 200) {",
+											"    var jsonData = pm.response.json();",
+											"    if (jsonData.success && jsonData.data.token) {",
+											"        pm.collectionVariables.set('admin_token', jsonData.data.token);",
+											"        console.log('Admin token saved:', jsonData.data.token);",
+											"    }",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"SecureAdminPass123!\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/login",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "login"]
+								},
+								"description": "Admin login - token is automatically saved to collection variable"
+							},
+							"response": []
+						}
+					],
+					"description": "Admin authentication"
+				},
+				{
+					"name": "Dashboard",
+					"item": [
+						{
+							"name": "Get Dashboard Stats",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/dashboard",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "dashboard"]
+								},
+								"description": "Get admin dashboard statistics"
+							},
+							"response": []
+						}
+					],
+					"description": "Admin dashboard endpoints"
+				},
+				{
+					"name": "Orders",
+					"item": [
+						{
+							"name": "Get All Orders",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/orders?page=1&limit=20",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "orders"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "limit",
+											"value": "20",
+											"description": "Items per page (1-100)"
+										},
+										{
+											"key": "status",
+											"value": "",
+											"description": "Filter by status (pending, processing, shipped, delivered, cancelled)",
+											"disabled": true
+										},
+										{
+											"key": "payment_status",
+											"value": "",
+											"description": "Filter by payment status (pending, paid, failed, refunded)",
+											"disabled": true
+										},
+										{
+											"key": "search",
+											"value": "",
+											"description": "Search by order number or customer",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get all orders with filters and pagination"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Order Detail",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/orders/123",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "orders", "123"]
+								},
+								"description": "Get order detail by order ID (not order_number)"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Order Status",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"shipped\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/orders/123/status",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "orders", "123", "status"]
+								},
+								"description": "Update order status (pending, processing, shipped, delivered, cancelled)"
+							},
+							"response": []
+						}
+					],
+					"description": "Admin order management"
+				},
+				{
+					"name": "Products",
+					"item": [
+						{
+							"name": "Get All Products",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/products?page=1&limit=50&lang=en",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "products"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "limit",
+											"value": "50",
+											"description": "Items per page (1-100)"
+										},
+										{
+											"key": "lang",
+											"value": "en",
+											"description": "Language code"
+										},
+										{
+											"key": "is_available",
+											"value": "",
+											"description": "Filter by availability (1 or 0)",
+											"disabled": true
+										},
+										{
+											"key": "search",
+											"value": "",
+											"description": "Search by name or SKU",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get all products with admin view"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Product",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"is_available\": 1,\n  \"is_featured\": 1,\n  \"price\": 1399.99\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/products/1",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "products", "1"]
+								},
+								"description": "Update product details (availability, featured status, price)"
+							},
+							"response": []
+						}
+					],
+					"description": "Admin product management"
+				},
+				{
+					"name": "Pricing",
+					"item": [
+						{
+							"name": "Get Pricing Configuration",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/pricing",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "pricing"]
+								},
+								"description": "Get pricing configuration including global markup and category rules"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Global Markup",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"markup_value\": 18.5,\n  \"recalculate\": true\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/pricing/global",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "pricing", "global"]
+								},
+								"description": "Update global markup percentage and optionally recalculate all prices"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Category Markup",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"markup_value\": 25.0,\n  \"markup_type\": \"percentage\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/pricing/category/1",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "pricing", "category", "1"]
+								},
+								"description": "Update category-specific markup (percentage or fixed)"
+							},
+							"response": []
+						}
+					],
+					"description": "Admin pricing management"
+				},
+				{
+					"name": "Product Sync",
+					"item": [
+						{
+							"name": "Sync Products",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/sync/products?lang=en",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "sync", "products"],
+									"query": [
+										{
+											"key": "lang",
+											"value": "en",
+											"description": "Language for product sync"
+										}
+									]
+								},
+								"description": "Sync products from vendor API"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Sync Status",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/sync/status",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "sync", "status"]
+								},
+								"description": "Get last sync status and statistics"
+							},
+							"response": []
+						}
+					],
+					"description": "Product synchronization with vendor API"
+				},
+				{
+					"name": "Vendor Operations",
+					"item": [
+						{
+							"name": "Create Sales Order with Vendor",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/vendor/create-sales-order",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "vendor", "create-sales-order"]
+								},
+								"description": "Create end-of-day sales order with vendor API"
+							},
+							"response": []
+						}
+					],
+					"description": "Vendor API operations"
+				}
+			],
+			"description": "Admin-only endpoints (requires authentication)"
+		}
+	]
+}
+
