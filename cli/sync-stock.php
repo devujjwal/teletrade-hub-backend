@@ -10,9 +10,14 @@
  * 0 3 * * * /usr/local/bin/ea-php83 /path/to/project/cli/sync-stock.php >> /path/to/project/storage/logs/cron-sync.log 2>&1
  */
 
+// Immediate output to verify script execution
+echo "Script started at: " . date('Y-m-d H:i:s') . "\n";
+echo "PHP Version: " . PHP_VERSION . "\n";
+echo "Script location: " . __FILE__ . "\n";
+
 // Enable error reporting for debugging
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Don't display, but log
+ini_set('display_errors', 1); // Enable display for CLI
 ini_set('log_errors', 1);
 
 // Determine base path - works from both cli/ and public/cli/
