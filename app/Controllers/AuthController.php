@@ -119,11 +119,42 @@ class AuthController
             // SECURITY: Clear rate limit on successful login
             $this->rateLimiter->clearLimit($clientIp, 'customer_login');
 
+            // Generate a simple token for customer (similar to admin)
+            // For now, use a basic token. In production, implement proper session management
+            $token = bin2hex(random_bytes(32));
+            
+            // Store session in database if user_sessions table exists
+            // Otherwise, just return the token for client-side storage
+            try {
+                $db = Database::getConnection();
+                $expiresAt = date('Y-m-d H:i:s', time() + 86400); // 24 hours
+                
+                $sql = "INSERT INTO user_sessions (user_id, token, ip_address, user_agent, expires_at) 
+                        VALUES (:user_id, :token, :ip_address, :user_agent, :expires_at)
+                        ON DUPLICATE KEY UPDATE 
+                            token = VALUES(token), 
+                            expires_at = VALUES(expires_at),
+                            updated_at = CURRENT_TIMESTAMP";
+                
+                $stmt = $db->prepare($sql);
+                $stmt->execute([
+                    ':user_id' => $user['id'],
+                    ':token' => $token,
+                    ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+                    ':user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500),
+                    ':expires_at' => $expiresAt
+                ]);
+            } catch (Exception $e) {
+                // If user_sessions table doesn't exist, just continue without storing
+                error_log("Customer session storage failed (table may not exist): " . $e->getMessage());
+            }
+
             // Remove password hash from response
             unset($user['password_hash']);
 
             Response::success([
                 'user' => $user,
+                'token' => $token,
                 'message' => 'Login successful'
             ]);
         } catch (Exception $e) {
