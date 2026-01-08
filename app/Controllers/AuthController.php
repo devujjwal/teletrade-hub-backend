@@ -354,11 +354,16 @@ public function getAddresses()
             Response::error('Invalid request data', 400);
         }
 
-        // Validate input
+        // Check that at least street or address_line1 is provided
+        if (empty($input['street']) && empty($input['address_line1'])) {
+            Response::error('Street address is required', 400);
+        }
+
+        // Validate input (both street formats are optional since we check above)
         $errors = Validator::validate($input, [
             'label' => 'sometimes|string',
-            'street' => 'sometimes|required|string',
-            'address_line1' => 'sometimes|required|string',
+            'street' => 'sometimes|string',
+            'address_line1' => 'sometimes|string',
             'street2' => 'sometimes|string',
             'address_line2' => 'sometimes|string',
             'city' => 'required|string',
@@ -367,11 +372,6 @@ public function getAddresses()
             'country' => 'required|string',
             'is_default' => 'sometimes|boolean'
         ]);
-
-        // Check that at least street or address_line1 is provided
-        if (empty($input['street']) && empty($input['address_line1'])) {
-            Response::error('Street address is required', 400);
-        }
 
         if (!empty($errors)) {
             Response::error('Validation failed', 400, $errors);
