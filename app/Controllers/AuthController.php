@@ -234,9 +234,96 @@ class AuthController
     }
 
     /**
+     * Change password
+     */
+    public function changePassword()
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        // Validate input
+        $errors = Validator::validate($input, [
+            'current_password' => 'required',
+            'new_password' => 'required|min:8',
+            'confirm_password' => 'required'
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        // Check if new passwords match
+        if ($input['new_password'] !== $input['confirm_password']) {
+            Response::error('New passwords do not match', 400);
+        }
+
+        // Verify current password
+        if (!password_verify($input['current_password'], $user['password_hash'])) {
+            Response::error('Current password is incorrect', 400);
+        }
+
+        try {
+            // Hash new password
+            $newPasswordHash = password_hash($input['new_password'], PASSWORD_DEFAULT);
+
+            // Update password
+            $db = Database::getConnection();
+            $sql = "UPDATE users SET password_hash = :password_hash WHERE id = :id";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([
+                ':password_hash' => $newPasswordHash,
+                ':id' => $user['id']
+            ]);
+
+            Response::success([], 'Password changed successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to change password: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Logout user
+     */
+    public function logout()
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::success([], 'Already logged out');
+        }
+
+        try {
+            // Get token
+            $headers = getallheaders();
+            $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+            
+            if (!empty($authHeader) && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+                $token = $matches[1];
+                
+                // Delete session
+                $db = Database::getConnection();
+                $sql = "DELETE FROM user_sessions WHERE token = :token";
+                $stmt = $db->prepare($sql);
+                $stmt->execute([':token' => $token]);
+            }
+
+            Response::success([], 'Logged out successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to logout: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Get user addresses
      */
-    public function getAddresses()
+public function getAddresses()
     {
         $user = $this->getCurrentUser();
         if (!$user) {
@@ -270,14 +357,21 @@ class AuthController
         // Validate input
         $errors = Validator::validate($input, [
             'label' => 'sometimes|string',
-            'street' => 'required|string',
+            'street' => 'sometimes|required|string',
+            'address_line1' => 'sometimes|required|string',
             'street2' => 'sometimes|string',
+            'address_line2' => 'sometimes|string',
             'city' => 'required|string',
-            'state' => 'required|string',
+            'state' => 'sometimes|string',
             'postal_code' => 'required|string',
             'country' => 'required|string',
             'is_default' => 'sometimes|boolean'
         ]);
+
+        // Check that at least street or address_line1 is provided
+        if (empty($input['street']) && empty($input['address_line1'])) {
+            Response::error('Street address is required', 400);
+        }
 
         if (!empty($errors)) {
             Response::error('Validation failed', 400, $errors);
@@ -293,20 +387,26 @@ class AuthController
                 $stmt->execute([':user_id' => $user['id']]);
             }
 
-            $sql = "INSERT INTO addresses (user_id, label, street, street2, city, state, postal_code, country, is_default)
-                    VALUES (:user_id, :label, :street, :street2, :city, :state, :postal_code, :country, :is_default)";
+            // Support both old and new address formats
+            $street = $input['street'] ?? $input['address_line1'] ?? '';
+            $street2 = $input['street2'] ?? $input['address_line2'] ?? '';
+            
+            $sql = "INSERT INTO addresses (user_id, label, street, street2, city, state, postal_code, country, is_default, address_line1, address_line2)
+                    VALUES (:user_id, :label, :street, :street2, :city, :state, :postal_code, :country, :is_default, :address_line1, :address_line2)";
 
             $stmt = $db->prepare($sql);
             $stmt->execute([
                 ':user_id' => $user['id'],
-                ':label' => Sanitizer::string($input['label'] ?? 'Home'),
-                ':street' => Sanitizer::string($input['street']),
-                ':street2' => Sanitizer::string($input['street2'] ?? ''),
+                ':label' => Sanitizer::string($input['label'] ?? ''),
+                ':street' => Sanitizer::string($street),
+                ':street2' => Sanitizer::string($street2),
                 ':city' => Sanitizer::string($input['city']),
-                ':state' => Sanitizer::string($input['state']),
+                ':state' => Sanitizer::string($input['state'] ?? ''),
                 ':postal_code' => Sanitizer::string($input['postal_code']),
                 ':country' => Sanitizer::string($input['country']),
-                ':is_default' => !empty($input['is_default']) ? 1 : 0
+                ':is_default' => !empty($input['is_default']) ? 1 : 0,
+                ':address_line1' => Sanitizer::string($street), // For backward compatibility
+                ':address_line2' => Sanitizer::string($street2) // For backward compatibility
             ]);
 
             $addressId = $db->lastInsertId();
@@ -353,7 +453,22 @@ class AuthController
             $fields = [];
             $params = [':id' => $addressId];
 
-            $allowedFields = ['label', 'street', 'street2', 'city', 'state', 'postal_code', 'country', 'is_default'];
+            // Support both new (street/street2) and old (address_line1/address_line2) formats
+            if (isset($input['street']) || isset($input['address_line1'])) {
+                $street = $input['street'] ?? $input['address_line1'];
+                $fields[] = "street = :street";
+                $fields[] = "address_line1 = :street"; // Keep in sync
+                $params[':street'] = Sanitizer::string($street);
+            }
+            
+            if (isset($input['street2']) || isset($input['address_line2'])) {
+                $street2 = $input['street2'] ?? $input['address_line2'] ?? '';
+                $fields[] = "street2 = :street2";
+                $fields[] = "address_line2 = :street2"; // Keep in sync
+                $params[':street2'] = Sanitizer::string($street2);
+            }
+
+            $allowedFields = ['label', 'city', 'state', 'postal_code', 'country', 'is_default'];
             foreach ($allowedFields as $field) {
                 if (isset($input[$field])) {
                     $fields[] = "$field = :$field";
@@ -412,7 +527,8 @@ class AuthController
     private function getCurrentUser()
     {
         $headers = getallheaders();
-        $authHeader = $headers['Authorization'] ?? '';
+        // Check both Authorization and authorization (case-insensitive)
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
 
         if (empty($authHeader)) {
             return null;

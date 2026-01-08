@@ -129,6 +129,55 @@ class OrderController
     }
 
     /**
+     * List customer's orders
+     * Requires authentication
+     */
+    public function list()
+    {
+        // Get authenticated user
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        
+        if (empty($authHeader) || !preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            Response::unauthorized('Authentication required');
+        }
+        
+        $token = $matches[1];
+        
+        // Validate token and get user
+        try {
+            $db = Database::getConnection();
+            $sql = "SELECT us.user_id
+                    FROM user_sessions us
+                    WHERE us.token = :token 
+                    AND us.expires_at > NOW()";
+            
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':token' => $token]);
+            $session = $stmt->fetch();
+            
+            if (!$session) {
+                Response::unauthorized('Invalid or expired token');
+            }
+            
+            // Get user's orders
+            $userModel = new User();
+            $orders = $userModel->getOrders($session['user_id'], 100); // Limit to 100 orders
+            
+            // Get details for each order
+            $ordersWithDetails = [];
+            foreach ($orders as $order) {
+                $orderDetails = $this->orderService->getOrderDetails($order['id'], false);
+                $ordersWithDetails[] = $orderDetails;
+            }
+            
+            Response::success(['data' => $ordersWithDetails]);
+        } catch (Exception $e) {
+            Response::error('Failed to fetch orders: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Get order details
      * SECURITY: Validate order ownership or guest token access
      */

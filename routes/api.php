@@ -145,6 +145,11 @@ $router = new Router();
 $router->get('', 'HealthController', 'index');
 $router->get('health', 'HealthController', 'check');
 
+// Database setup/migration endpoints (remove after setup)
+$router->get('setup/create-user-sessions-table', 'HealthController', 'createUserSessionsTable');
+$router->get('setup/update-addresses-table', 'HealthController', 'updateAddressesTable');
+$router->get('setup/debug-auth', 'HealthController', 'debugAuth');
+
 // Languages
 $router->get('languages', 'ProductController', 'languages');
 
@@ -165,6 +170,7 @@ $router->get('brands/{slug}/products', 'ProductController', 'productsByBrand');
 $router->get('settings/public', 'AdminController', 'getPublicSettings');
 
 // Orders (Customer)
+$router->get('orders', 'OrderController', 'list');
 $router->post('orders', 'OrderController', 'create');
 $router->get('orders/{orderId}', 'OrderController', 'show');
 $router->post('orders/{orderId}/payment-success', 'OrderController', 'paymentSuccess');
@@ -173,8 +179,10 @@ $router->post('orders/{orderId}/payment-failed', 'OrderController', 'paymentFail
 // Auth (Customer)
 $router->post('auth/register', 'AuthController', 'register');
 $router->post('auth/login', 'AuthController', 'login');
+$router->post('auth/logout', 'AuthController', 'logout');
 $router->get('auth/me', 'AuthController', 'me');
 $router->put('auth/profile', 'AuthController', 'updateProfile');
+$router->put('auth/password', 'AuthController', 'changePassword');
 $router->get('auth/addresses', 'AuthController', 'getAddresses');
 $router->post('auth/addresses', 'AuthController', 'createAddress');
 $router->put('auth/addresses/{id}', 'AuthController', 'updateAddress');

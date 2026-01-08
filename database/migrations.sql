@@ -243,24 +243,44 @@ CREATE TABLE IF NOT EXISTS `admin_sessions` (
   FOREIGN KEY (`admin_user_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- User Sessions (Customer)
+CREATE TABLE IF NOT EXISTS `user_sessions` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `token` VARCHAR(255) NOT NULL,
+  `ip_address` VARCHAR(45) NULL,
+  `user_agent` VARCHAR(500) NULL,
+  `expires_at` TIMESTAMP NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`),
+  UNIQUE KEY `unique_user` (`user_id`),
+  KEY `expires_at` (`expires_at`),
+  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =====================================================
 -- ORDER TABLES
 -- =====================================================
 
--- Addresses
+-- Addresses (User Address Book & Order Addresses)
 CREATE TABLE IF NOT EXISTS `addresses` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` INT UNSIGNED NULL,
-  `first_name` VARCHAR(100) NOT NULL,
-  `last_name` VARCHAR(100) NOT NULL,
+  `label` VARCHAR(100) NULL COMMENT 'Address label (Home, Office, etc.)',
+  `first_name` VARCHAR(100) NULL,
+  `last_name` VARCHAR(100) NULL,
   `company` VARCHAR(200) NULL,
-  `address_line1` VARCHAR(255) NOT NULL,
-  `address_line2` VARCHAR(255) NULL,
+  `street` VARCHAR(255) NOT NULL COMMENT 'Street address (address_line1)',
+  `street2` VARCHAR(255) NULL COMMENT 'Address line 2',
+  `address_line1` VARCHAR(255) NULL COMMENT 'Deprecated: use street',
+  `address_line2` VARCHAR(255) NULL COMMENT 'Deprecated: use street2',
   `city` VARCHAR(100) NOT NULL,
   `state` VARCHAR(100) NULL,
   `postal_code` VARCHAR(20) NOT NULL,
-  `country` VARCHAR(2) NOT NULL COMMENT 'ISO 3166-1 alpha-2',
-  `phone` VARCHAR(50) NOT NULL,
+  `country` VARCHAR(100) NOT NULL COMMENT 'Country name or ISO code',
+  `phone` VARCHAR(50) NULL,
   `is_default` TINYINT(1) DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
