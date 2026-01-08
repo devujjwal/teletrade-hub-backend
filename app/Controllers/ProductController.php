@@ -70,12 +70,13 @@ class ProductController
         // - is_available=1 (default): only in-stock products
         // - is_available=0: only out-of-stock products
         // - is_available=all: show all products (including out of stock)
-        if (isset($_GET['is_available'])) {
-            if ($_GET['is_available'] === 'all') {
+        $isAvailableParam = $_GET['is_available'] ?? null;
+        if ($isAvailableParam !== null && $isAvailableParam !== '') {
+            if ($isAvailableParam === 'all') {
                 // Don't set is_available filter to show all products
                 // This will be handled by not setting the filter
             } else {
-                $filters['is_available'] = $_GET['is_available'] === '1' ? 1 : 0;
+                $filters['is_available'] = ($isAvailableParam === '1' || $isAvailableParam === 1) ? 1 : 0;
             }
         } else {
             // Default: only show in-stock products (is_available = 1)
