@@ -65,6 +65,7 @@ class ProductController
             $filters['search'] = Sanitizer::string($_GET['search']);
         }
         // By default, only show available products (in stock)
+        // This applies to ALL product queries including featured products, related products, etc.
         // Allow override via query parameter:
         // - is_available=1 (default): only in-stock products
         // - is_available=0: only out-of-stock products
@@ -83,11 +84,6 @@ class ProductController
         }
         if (!empty($_GET['is_featured'])) {
             $filters['is_featured'] = 1;
-            // Ensure is_available filter is still applied for featured products
-            // unless explicitly overridden
-            if (!isset($filters['is_available'])) {
-                $filters['is_available'] = 1;
-            }
         }
         if (!empty($_GET['sort'])) {
             $filters['sort'] = Sanitizer::string($_GET['sort']);
