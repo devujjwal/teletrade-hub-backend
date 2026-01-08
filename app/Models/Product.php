@@ -37,9 +37,15 @@ class Product
         }
 
         // Filter by availability
+        // IMPORTANT: By default, only show available products (is_available = 1)
+        // This filter should always be set unless explicitly overridden
         if (isset($filters['is_available'])) {
             $sql .= " AND is_available = :is_available";
-            $params[':is_available'] = $filters['is_available'];
+            $params[':is_available'] = intval($filters['is_available']);
+        } else {
+            // Safety fallback: if filter is not set, default to available products only
+            // This should not happen if controller sets it correctly, but ensures safety
+            $sql .= " AND is_available = 1";
         }
 
         // Filter by price range
@@ -152,9 +158,13 @@ class Product
             $sql .= " AND brand_id = :brand_id";
             $params[':brand_id'] = intval($filters['brand_id']);
         }
+        // Filter by availability - same logic as getAll()
         if (isset($filters['is_available'])) {
             $sql .= " AND is_available = :is_available";
-            $params[':is_available'] = $filters['is_available'];
+            $params[':is_available'] = intval($filters['is_available']);
+        } else {
+            // Safety fallback: if filter is not set, default to available products only
+            $sql .= " AND is_available = 1";
         }
         // Filter by product source - only apply if explicitly set to 'vendor' or 'own'
         if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
