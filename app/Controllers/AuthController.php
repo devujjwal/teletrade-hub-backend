@@ -161,5 +161,305 @@ class AuthController
             Response::error('Login failed: ' . $e->getMessage(), 500);
         }
     }
+
+    /**
+     * Get current authenticated user
+     */
+    public function me()
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        // Remove password hash from response
+        unset($user['password_hash']);
+
+        Response::success(['user' => $user]);
+    }
+
+    /**
+     * Update user profile
+     */
+    public function updateProfile()
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        // Validate input
+        $errors = Validator::validate($input, [
+            'first_name' => 'sometimes|required',
+            'last_name' => 'sometimes|required',
+            'phone' => 'sometimes|string'
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        try {
+            $updateData = [];
+            if (isset($input['first_name'])) {
+                $updateData[':first_name'] = Sanitizer::string($input['first_name']);
+            }
+            if (isset($input['last_name'])) {
+                $updateData[':last_name'] = Sanitizer::string($input['last_name']);
+            }
+            if (isset($input['phone'])) {
+                $updateData[':phone'] = Sanitizer::string($input['phone']);
+            }
+
+            if (empty($updateData)) {
+                Response::error('No fields to update', 400);
+            }
+
+            $this->userModel->update($user['id'], $updateData);
+
+            // Get updated user
+            $updatedUser = $this->userModel->getById($user['id']);
+            unset($updatedUser['password_hash']);
+
+            Response::success(['user' => $updatedUser], 'Profile updated successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to update profile: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get user addresses
+     */
+    public function getAddresses()
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        try {
+            $addresses = $this->userModel->getAddresses($user['id']);
+            Response::success(['addresses' => $addresses]);
+        } catch (Exception $e) {
+            Response::error('Failed to fetch addresses: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Create new address
+     */
+    public function createAddress()
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        // Validate input
+        $errors = Validator::validate($input, [
+            'label' => 'sometimes|string',
+            'street' => 'required|string',
+            'street2' => 'sometimes|string',
+            'city' => 'required|string',
+            'state' => 'required|string',
+            'postal_code' => 'required|string',
+            'country' => 'required|string',
+            'is_default' => 'sometimes|boolean'
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        try {
+            $db = Database::getConnection();
+
+            // If this is set as default, unset other defaults
+            if (!empty($input['is_default'])) {
+                $sql = "UPDATE addresses SET is_default = 0 WHERE user_id = :user_id";
+                $stmt = $db->prepare($sql);
+                $stmt->execute([':user_id' => $user['id']]);
+            }
+
+            $sql = "INSERT INTO addresses (user_id, label, street, street2, city, state, postal_code, country, is_default)
+                    VALUES (:user_id, :label, :street, :street2, :city, :state, :postal_code, :country, :is_default)";
+
+            $stmt = $db->prepare($sql);
+            $stmt->execute([
+                ':user_id' => $user['id'],
+                ':label' => Sanitizer::string($input['label'] ?? 'Home'),
+                ':street' => Sanitizer::string($input['street']),
+                ':street2' => Sanitizer::string($input['street2'] ?? ''),
+                ':city' => Sanitizer::string($input['city']),
+                ':state' => Sanitizer::string($input['state']),
+                ':postal_code' => Sanitizer::string($input['postal_code']),
+                ':country' => Sanitizer::string($input['country']),
+                ':is_default' => !empty($input['is_default']) ? 1 : 0
+            ]);
+
+            $addressId = $db->lastInsertId();
+            $address = $this->getAddressById($addressId);
+
+            Response::success(['address' => $address], 'Address created successfully', 201);
+        } catch (Exception $e) {
+            Response::error('Failed to create address: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Update address
+     */
+    public function updateAddress($addressId)
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        // Verify address belongs to user
+        $address = $this->getAddressById($addressId);
+        if (!$address || $address['user_id'] != $user['id']) {
+            Response::error('Address not found', 404);
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        try {
+            $db = Database::getConnection();
+
+            // If this is set as default, unset other defaults
+            if (!empty($input['is_default'])) {
+                $sql = "UPDATE addresses SET is_default = 0 WHERE user_id = :user_id AND id != :address_id";
+                $stmt = $db->prepare($sql);
+                $stmt->execute([':user_id' => $user['id'], ':address_id' => $addressId]);
+            }
+
+            $fields = [];
+            $params = [':id' => $addressId];
+
+            $allowedFields = ['label', 'street', 'street2', 'city', 'state', 'postal_code', 'country', 'is_default'];
+            foreach ($allowedFields as $field) {
+                if (isset($input[$field])) {
+                    $fields[] = "$field = :$field";
+                    $params[":$field"] = $field === 'is_default' 
+                        ? (!empty($input[$field]) ? 1 : 0)
+                        : Sanitizer::string($input[$field]);
+                }
+            }
+
+            if (empty($fields)) {
+                Response::error('No fields to update', 400);
+            }
+
+            $sql = "UPDATE addresses SET " . implode(', ', $fields) . " WHERE id = :id";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+
+            $updatedAddress = $this->getAddressById($addressId);
+            Response::success(['address' => $updatedAddress], 'Address updated successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to update address: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Delete address
+     */
+    public function deleteAddress($addressId)
+    {
+        $user = $this->getCurrentUser();
+        if (!$user) {
+            Response::unauthorized('Authentication required');
+        }
+
+        // Verify address belongs to user
+        $address = $this->getAddressById($addressId);
+        if (!$address || $address['user_id'] != $user['id']) {
+            Response::error('Address not found', 404);
+        }
+
+        try {
+            $db = Database::getConnection();
+            $sql = "DELETE FROM addresses WHERE id = :id";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':id' => $addressId]);
+
+            Response::success([], 'Address deleted successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to delete address: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get current authenticated user from token
+     */
+    private function getCurrentUser()
+    {
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? '';
+
+        if (empty($authHeader)) {
+            return null;
+        }
+
+        // Extract token
+        if (!preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            return null;
+        }
+
+        $token = $matches[1];
+
+        // Validate token from user_sessions table
+        try {
+            $db = Database::getConnection();
+            $sql = "SELECT us.user_id, u.* 
+                    FROM user_sessions us
+                    JOIN users u ON us.user_id = u.id
+                    WHERE us.token = :token 
+                    AND us.expires_at > NOW()
+                    AND u.is_active = 1";
+
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':token' => $token]);
+            $user = $stmt->fetch();
+
+            return $user ?: null;
+        } catch (Exception $e) {
+            error_log("Error validating customer token: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Get address by ID
+     */
+    private function getAddressById($addressId)
+    {
+        try {
+            $db = Database::getConnection();
+            $sql = "SELECT * FROM addresses WHERE id = :id";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':id' => $addressId]);
+            return $stmt->fetch();
+        } catch (Exception $e) {
+            return null;
+        }
+    }
 }
 

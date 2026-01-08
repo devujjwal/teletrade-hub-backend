@@ -173,6 +173,12 @@ $router->post('orders/{orderId}/payment-failed', 'OrderController', 'paymentFail
 // Auth (Customer)
 $router->post('auth/register', 'AuthController', 'register');
 $router->post('auth/login', 'AuthController', 'login');
+$router->get('auth/me', 'AuthController', 'me');
+$router->put('auth/profile', 'AuthController', 'updateProfile');
+$router->get('auth/addresses', 'AuthController', 'getAddresses');
+$router->post('auth/addresses', 'AuthController', 'createAddress');
+$router->put('auth/addresses/{id}', 'AuthController', 'updateAddress');
+$router->delete('auth/addresses/{id}', 'AuthController', 'deleteAddress');
 
 // ==================== Admin API Routes ====================
 
