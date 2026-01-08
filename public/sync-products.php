@@ -1,22 +1,24 @@
 <?php
 /**
- * Temporary Product Sync Script
- * Workaround for ModSecurity blocking POST requests
+ * Product Sync Script
+ * SECURITY: Requires secure key from environment
  * 
- * Usage: https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345
- * 
- * DELETE THIS FILE AFTER FIRST SYNC!
+ * Usage: https://api.vs-mjrinfotech.com/sync-products.php?key=YOUR_SYNC_KEY
  */
 
-// Simple password protection
+// Load environment first
+require_once __DIR__ . '/../app/Config/env.php';
+Env::load();
+
+// SECURITY: Require secure sync key from environment
 $key = $_GET['key'] ?? '';
-if ($key !== 'SECURE_KEY_12345') {
+$expectedKey = Env::get('SYNC_KEY', '');
+if (empty($expectedKey) || !hash_equals($expectedKey, $key)) {
     http_response_code(401);
     die(json_encode(['error' => 'Unauthorized access']));
 }
 
 // Load dependencies
-require_once __DIR__ . '/../app/Config/env.php';
 require_once __DIR__ . '/../app/Config/database.php';
 require_once __DIR__ . '/../app/Utils/Response.php';
 require_once __DIR__ . '/../app/Utils/Validator.php';
@@ -33,8 +35,7 @@ require_once __DIR__ . '/../app/Services/ProductSyncService.php';
 header('Content-Type: text/html; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
 
-// Initialize environment
-Env::load();
+// Environment already loaded above
 
 // Increase execution time and memory for multi-language sync
 set_time_limit(600); // 10 minutes

@@ -1,19 +1,30 @@
 <?php
 /**
  * Debug Products - Show actual database content
+ * SECURITY: Only available in development mode
  * 
- * Usage: https://api.vs-mjrinfotech.com/debug-products.php?key=SECURE_KEY_12345
+ * Usage: https://api.vs-mjrinfotech.com/debug-products.php?key=YOUR_DEBUG_KEY
  */
 
-// Simple password protection
+// Load environment first
+require_once __DIR__ . '/../app/Config/env.php';
+Env::load();
+
+// SECURITY: Disable in production
+if (Env::get('APP_ENV', 'production') === 'production') {
+    http_response_code(403);
+    die(json_encode(['error' => 'Debug endpoints disabled in production']));
+}
+
+// SECURITY: Require secure debug key from environment
 $key = $_GET['key'] ?? '';
-if ($key !== 'SECURE_KEY_12345') {
+$expectedKey = Env::get('DEBUG_KEY', '');
+if (empty($expectedKey) || !hash_equals($expectedKey, $key)) {
     http_response_code(401);
     die(json_encode(['error' => 'Unauthorized access']));
 }
 
-// Load dependencies
-require_once __DIR__ . '/../app/Config/env.php';
+// Load dependencies (env already loaded above)
 require_once __DIR__ . '/../app/Config/database.php';
 
 // Set headers

@@ -1,10 +1,27 @@
 <?php
 /**
  * Fix is_available flag based on stock_quantity
+ * SECURITY: Requires secure key from environment
  * This script ensures is_available is in sync with actual stock quantities
+ * 
+ * Usage: php fix-is-available.php (CLI) or ?key=YOUR_SYNC_KEY (web)
  */
 
+// Load environment first
+require_once __DIR__ . '/../app/Config/env.php';
 require_once __DIR__ . '/../app/Config/database.php';
+
+Env::load();
+
+// SECURITY: If accessed via web, require authentication
+if (php_sapi_name() !== 'cli') {
+    $key = $_GET['key'] ?? '';
+    $expectedKey = Env::get('SYNC_KEY', '');
+    if (empty($expectedKey) || !hash_equals($expectedKey, $key)) {
+        http_response_code(401);
+        die(json_encode(['error' => 'Unauthorized access']));
+    }
+}
 
 try {
     $db = Database::getInstance();

@@ -145,12 +145,19 @@ class AdminController
 
     /**
      * Debug: Get database diagnostics (temporary - no auth required)
+     * SECURITY: Only available in development mode with secure key
      */
     public function debugDatabase()
     {
-        // Simple key protection
+        // SECURITY: Disable in production
+        if (Env::get('APP_ENV', 'production') === 'production') {
+            Response::error('Not available in production', 403);
+        }
+        
+        // SECURITY: Require secure debug key from environment
         $key = $_GET['key'] ?? '';
-        if ($key !== 'SECURE_KEY_12345') {
+        $expectedKey = Env::get('DEBUG_KEY', '');
+        if (empty($expectedKey) || !hash_equals($expectedKey, $key)) {
             Response::error('Unauthorized', 401);
         }
 
@@ -239,9 +246,15 @@ class AdminController
      */
     public function debugVendorApi()
     {
-        // Simple key protection
+        // SECURITY: Disable in production
+        if (Env::get('APP_ENV', 'production') === 'production') {
+            Response::error('Not available in production', 403);
+        }
+        
+        // SECURITY: Require secure debug key from environment
         $key = $_GET['key'] ?? '';
-        if ($key !== 'SECURE_KEY_12345') {
+        $expectedKey = Env::get('DEBUG_KEY', '');
+        if (empty($expectedKey) || !hash_equals($expectedKey, $key)) {
             Response::error('Unauthorized', 401);
         }
 

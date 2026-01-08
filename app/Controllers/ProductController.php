@@ -4,6 +4,9 @@ require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Middlewares/LanguageMiddleware.php';
+if (!class_exists('Env')) {
+    require_once __DIR__ . '/../Config/env.php';
+}
 
 /**
  * Product Controller
@@ -167,30 +170,36 @@ class ProductController
                 'language' => LanguageMiddleware::getLanguageInfo()
             ]);
         } catch (Exception $e) {
-            // Bypass production error sanitization for debugging
-            http_response_code(200);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode([
-                'success' => false,
-                'message' => 'Search error',
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'query' => $_GET['q'] ?? null
-            ]);
-            exit;
+            // SECURITY: Sanitize error messages in production
+            $isDebug = Env::get('APP_DEBUG', 'false') === 'true';
+            
+            error_log("Product search error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            
+            if ($isDebug) {
+                // Only expose detailed errors in debug mode
+                Response::error('Search error: ' . $e->getMessage(), 500, [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'query' => Sanitizer::string($_GET['q'] ?? '')
+                ]);
+            } else {
+                // Generic error message in production
+                Response::error('Search temporarily unavailable. Please try again later.', 500);
+            }
         } catch (Error $e) {
-            // Catch PHP errors
-            http_response_code(200);
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode([
-                'success' => false,
-                'message' => 'PHP Error in search',
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
-            exit;
+            // SECURITY: Sanitize PHP errors in production
+            $isDebug = Env::get('APP_DEBUG', 'false') === 'true';
+            
+            error_log("PHP Error in product search: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            
+            if ($isDebug) {
+                Response::error('PHP Error in search: ' . $e->getMessage(), 500, [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
+            } else {
+                Response::error('An error occurred. Please try again later.', 500);
+            }
         }
     }
 

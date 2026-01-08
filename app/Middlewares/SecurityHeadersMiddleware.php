@@ -24,16 +24,30 @@ class SecurityHeadersMiddleware
         header("Referrer-Policy: strict-origin-when-cross-origin");
         
         // Content Security Policy
+        // SECURITY: Remove unsafe directives in production
+        $isDevelopment = Env::get('APP_ENV', 'production') === 'development';
+        
+        $scriptSrc = "'self'";
+        $styleSrc = "'self'";
+        
+        // Only allow unsafe directives in development
+        if ($isDevelopment) {
+            $scriptSrc .= " 'unsafe-inline' 'unsafe-eval'";
+            $styleSrc .= " 'unsafe-inline'";
+        }
+        
         $csp = implode('; ', [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // TODO: Remove unsafe-inline and unsafe-eval in production
-            "style-src 'self' 'unsafe-inline'",
+            "script-src {$scriptSrc}",
+            "style-src {$styleSrc}",
             "img-src 'self' data: https:",
             "font-src 'self' data:",
             "connect-src 'self'",
             "frame-ancestors 'none'",
             "base-uri 'self'",
-            "form-action 'self'"
+            "form-action 'self'",
+            "object-src 'none'",
+            "upgrade-insecure-requests"
         ]);
         header("Content-Security-Policy: $csp");
         

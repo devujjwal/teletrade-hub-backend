@@ -130,7 +130,7 @@ class OrderController
 
     /**
      * Get order details
-     * SECURITY: Validate order ownership or guest email access
+     * SECURITY: Validate order ownership or guest token access
      */
     public function show($orderNumber)
     {
@@ -143,22 +143,35 @@ class OrderController
         // SECURITY CRITICAL: Validate access rights
         // Allow access if:
         // 1. Authenticated user owns the order (user_id matches)
-        // 2. Guest order accessed with correct email (TODO: implement email verification link)
+        // 2. Guest order accessed with valid token (generated from order details)
         // 3. Admin accessing (via separate admin endpoint)
         
         $userId = $_GET['user_id'] ?? null;
-        $guestEmail = $_GET['guest_email'] ?? null;
+        $guestToken = $_GET['guest_token'] ?? null;
+        $guestEmail = $_GET['guest_email'] ?? null; // Fallback for backward compatibility
         
         $hasAccess = false;
         
         // Registered user access
-        if ($userId && $order['user_id'] == $userId) {
+        if ($userId && $order['user_id'] && $order['user_id'] == intval($userId)) {
             $hasAccess = true;
         }
-        // Guest access (basic check - should be enhanced with token/link in production)
-        elseif ($guestEmail && $order['guest_email'] && 
-                strtolower(trim($order['guest_email'])) === strtolower(trim($guestEmail))) {
-            $hasAccess = true;
+        // Guest access with token (preferred method)
+        elseif ($guestToken && $order['guest_email']) {
+            $expectedToken = $this->generateGuestOrderToken($order['order_number'], $order['guest_email']);
+            if (hash_equals($expectedToken, $guestToken)) {
+                $hasAccess = true;
+            }
+        }
+        // Guest access with email (fallback - less secure)
+        elseif ($guestEmail && $order['guest_email']) {
+            // SECURITY: Use timing-safe comparison
+            if (hash_equals(
+                strtolower(trim($order['guest_email'])), 
+                strtolower(trim($guestEmail))
+            )) {
+                $hasAccess = true;
+            }
         }
         
         if (!$hasAccess) {
@@ -169,6 +182,22 @@ class OrderController
         $fullOrder = $this->orderService->getOrderDetails($order['id'], false);
 
         Response::success(['order' => $fullOrder]);
+    }
+    
+    /**
+     * Generate secure token for guest order access
+     * SECURITY: Uses order number, email, and secret key
+     * Must match the implementation in OrderService
+     */
+    private function generateGuestOrderToken($orderNumber, $guestEmail)
+    {
+        if (!class_exists('Env')) {
+            require_once __DIR__ . '/../Config/env.php';
+        }
+        
+        $secret = Env::get('APP_KEY', 'default-secret-change-in-production');
+        $data = $orderNumber . '|' . strtolower(trim($guestEmail)) . '|' . $secret;
+        return hash_hmac('sha256', $data, $secret);
     }
 
     /**

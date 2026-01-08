@@ -128,18 +128,47 @@ class OrderService
             // Update order fulfillment status
             $this->orderModel->updateFulfillmentStatus($orderId, $fulfillmentStatus);
 
+            // Generate guest access token if this is a guest order
+            $guestToken = null;
+            if (!empty($orderData['guest_email']) && empty($orderData['user_id'])) {
+                $guestToken = $this->generateGuestOrderToken($orderNumber, $orderData['guest_email']);
+            }
+            
             // Return customer-friendly response (no internal details)
-            return [
+            $response = [
                 'order_id' => $orderId,
                 'order_number' => $orderNumber,
                 'total' => $totals['total'],
                 'status' => 'pending',
                 'message' => 'Order created successfully. Please proceed with payment.'
             ];
+            
+            // SECURITY: Include guest token for guest orders (store securely on client)
+            if ($guestToken) {
+                $response['guest_token'] = $guestToken;
+                $response['message'] .= ' Save your order access token to track your order.';
+            }
+            
+            return $response;
         } catch (Exception $e) {
             $this->db->rollBack();
             throw $e;
         }
+    }
+    
+    /**
+     * Generate secure token for guest order access
+     * SECURITY: Uses order number, email, and secret key
+     */
+    private function generateGuestOrderToken($orderNumber, $guestEmail)
+    {
+        if (!class_exists('Env')) {
+            require_once __DIR__ . '/../Config/env.php';
+        }
+        
+        $secret = Env::get('APP_KEY', 'default-secret-change-in-production');
+        $data = $orderNumber . '|' . strtolower(trim($guestEmail)) . '|' . $secret;
+        return hash_hmac('sha256', $data, $secret);
     }
 
     /**
