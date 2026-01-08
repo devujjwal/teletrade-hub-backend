@@ -78,10 +78,16 @@ class ProductController
             }
         } else {
             // Default: only show in-stock products (is_available = 1)
+            // This applies to all queries including featured products
             $filters['is_available'] = 1;
         }
         if (!empty($_GET['is_featured'])) {
             $filters['is_featured'] = 1;
+            // Ensure is_available filter is still applied for featured products
+            // unless explicitly overridden
+            if (!isset($filters['is_available'])) {
+                $filters['is_available'] = 1;
+            }
         }
         if (!empty($_GET['sort'])) {
             $filters['sort'] = Sanitizer::string($_GET['sort']);
@@ -144,6 +150,10 @@ class ProductController
             }
 
             $filters = ['search' => $query];
+            // By default, only show available products (in stock)
+            if (!isset($_GET['is_available']) || $_GET['is_available'] !== 'all') {
+                $filters['is_available'] = 1;
+            }
             $products = $this->productModel->getAll($filters, $page, $limit, $lang);
             $total = $this->productModel->count($filters);
 
