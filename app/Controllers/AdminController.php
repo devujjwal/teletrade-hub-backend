@@ -571,51 +571,61 @@ class AdminController
         }
 
         try {
-            // Generate slug from name
-            $slug = $this->generateSlug($input['name']);
+            // Generate slug from SKU
+            $slug = $this->generateSlug($input['sku']);
             
             // Prepare product data
             $productData = [
                 ':product_source' => 'own',
                 ':vendor_article_id' => null,
                 ':sku' => Sanitizer::string($input['sku']),
-                ':ean' => $input['ean'] ?? null,
+                ':ean' => !empty($input['ean']) ? Sanitizer::string($input['ean']) : null,
                 ':name' => Sanitizer::string($input['name']),
                 ':slug' => $slug,
-                ':description' => $input['description'] ?? null,
+                ':description' => !empty($input['description']) ? Sanitizer::string($input['description']) : null,
                 ':category_id' => !empty($input['category_id']) ? intval($input['category_id']) : null,
                 ':brand_id' => !empty($input['brand_id']) ? intval($input['brand_id']) : null,
-                ':warranty_id' => null,
+                ':warranty_id' => !empty($input['warranty_id']) ? intval($input['warranty_id']) : null,
                 ':base_price' => floatval($input['base_price'] ?? 0),
                 ':price' => floatval($input['price'] ?? 0),
                 ':currency' => 'EUR',
                 ':stock_quantity' => intval($input['stock_quantity'] ?? 0),
                 ':available_quantity' => intval($input['stock_quantity'] ?? 0),
                 ':reserved_quantity' => 0,
-                ':reorder_point' => 0,
-                ':warehouse_location' => $input['warehouse_location'] ?? null,
+                ':reorder_point' => intval($input['reorder_point'] ?? 0),
+                ':warehouse_location' => !empty($input['warehouse_location']) ? Sanitizer::string($input['warehouse_location']) : null,
                 ':is_available' => isset($input['is_available']) ? ($input['is_available'] ? 1 : 0) : 1,
                 ':is_featured' => isset($input['is_featured']) ? ($input['is_featured'] ? 1 : 0) : 0,
-                ':weight' => null,
-                ':dimensions' => null,
-                ':color' => null,
-                ':storage' => null,
-                ':ram' => null,
-                ':specifications' => null,
+                ':weight' => !empty($input['weight']) ? floatval($input['weight']) : null,
+                ':dimensions' => !empty($input['dimensions']) ? Sanitizer::string($input['dimensions']) : null,
+                ':color' => !empty($input['color']) ? Sanitizer::string($input['color']) : null,
+                ':storage' => !empty($input['storage']) ? Sanitizer::string($input['storage']) : null,
+                ':ram' => !empty($input['ram']) ? Sanitizer::string($input['ram']) : null,
+                ':specifications' => !empty($input['specifications']) ? json_encode($input['specifications']) : null,
                 ':last_synced_at' => null,
             ];
 
-            // Initialize all language-specific fields to null for in-house products
+            // Handle language-specific fields
             foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
-                $productData[":name_{$lang}"] = null;
-                $productData[":description_{$lang}"] = null;
+                $productData[":name_{$lang}"] = !empty($input["name_{$lang}"]) ? Sanitizer::string($input["name_{$lang}"]) : null;
+                $productData[":description_{$lang}"] = !empty($input["description_{$lang}"]) ? Sanitizer::string($input["description_{$lang}"]) : null;
             }
 
             $productId = $this->getProductModel()->create($productData);
+            
+            // Handle image uploads if provided
+            if (!empty($input['images']) && is_array($input['images'])) {
+                foreach ($input['images'] as $index => $imageUrl) {
+                    $isPrimary = ($index === 0); // First image is primary
+                    $this->getProductModel()->addImage($productId, $imageUrl, null, $isPrimary);
+                }
+            }
+            
             $product = $this->getProductModel()->getById($productId);
             
             Response::success(['product' => $product], 'Product created successfully');
         } catch (Exception $e) {
+            error_log("Create product error: " . $e->getMessage());
             Response::error('Failed to create product: ' . $e->getMessage(), 500);
         }
     }
