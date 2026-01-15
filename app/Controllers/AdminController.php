@@ -579,7 +579,7 @@ class AdminController
 
         try {
             // Generate slug from SKU
-            $slug = $this->generateSlug($input['sku']);
+            $slug = $this->generateSlug($input['sku'], 'products');
             
             // Prepare product data
             $productData = [
