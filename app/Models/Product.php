@@ -288,7 +288,7 @@ class Product
             description_fr, description_es, description_ru, description_it, description_tr, description_ro, description_pl,
             category_id, brand_id, warranty_id, base_price, price, currency,
             stock_quantity, available_quantity, reserved_quantity, reorder_point, warehouse_location,
-            is_available, weight, dimensions,
+            is_available, is_featured, weight, dimensions,
             color, storage, ram, specifications, slug, last_synced_at
         ) VALUES (
             :product_source, :vendor_article_id, :sku, :ean, :name, 
@@ -297,7 +297,7 @@ class Product
             :description_fr, :description_es, :description_ru, :description_it, :description_tr, :description_ro, :description_pl,
             :category_id, :brand_id, :warranty_id, :base_price, :price, :currency,
             :stock_quantity, :available_quantity, :reserved_quantity, :reorder_point, :warehouse_location,
-            :is_available, :weight, :dimensions,
+            :is_available, :is_featured, :weight, :dimensions,
             :color, :storage, :ram, :specifications, :slug, :last_synced_at
         )";
 
