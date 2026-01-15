@@ -39,14 +39,16 @@ class Product
         // Filter by availability
         // IMPORTANT: By default, only show available products (is_available = 1)
         // This filter should always be set unless explicitly overridden
-        if (isset($filters['is_available'])) {
+        // Special case: 'all' means show both available and unavailable products (for admin)
+        if (isset($filters['is_available']) && $filters['is_available'] !== 'all') {
             $sql .= " AND is_available = :is_available";
             $params[':is_available'] = intval($filters['is_available']);
-        } else {
+        } elseif (!isset($filters['is_available'])) {
             // Safety fallback: if filter is not set, default to available products only
             // This should not happen if controller sets it correctly, but ensures safety
             $sql .= " AND is_available = 1";
         }
+        // If is_available === 'all', don't add any filter (show all products)
 
         // Filter by price range
         if (!empty($filters['min_price'])) {
@@ -159,13 +161,15 @@ class Product
             $params[':brand_id'] = intval($filters['brand_id']);
         }
         // Filter by availability - same logic as getAll()
-        if (isset($filters['is_available'])) {
+        // Special case: 'all' means show both available and unavailable products (for admin)
+        if (isset($filters['is_available']) && $filters['is_available'] !== 'all') {
             $sql .= " AND is_available = :is_available";
             $params[':is_available'] = intval($filters['is_available']);
-        } else {
+        } elseif (!isset($filters['is_available'])) {
             // Safety fallback: if filter is not set, default to available products only
             $sql .= " AND is_available = 1";
         }
+        // If is_available === 'all', don't add any filter (show all products)
         // Filter by product source - only apply if explicitly set to 'vendor' or 'own'
         if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
             $sql .= " AND product_source = :product_source";

@@ -509,8 +509,15 @@ class AdminController
         $lang = $_GET['lang'] ?? 'en';
 
         $filters = [];
-        if (isset($_GET['is_available'])) {
+        // Admin view: By default show ALL products (available and unavailable)
+        // Only filter if explicitly requested
+        if (isset($_GET['is_available']) && $_GET['is_available'] !== '' && $_GET['is_available'] !== 'all') {
             $filters['is_available'] = $_GET['is_available'] === '1' ? 1 : 0;
+        }
+        // For admin, we need to bypass the default filter in Product model
+        // Pass a special flag to indicate we want all products
+        if (!isset($filters['is_available'])) {
+            $filters['is_available'] = 'all'; // Special value to bypass default filter
         }
         if (!empty($_GET['search'])) {
             $filters['search'] = Sanitizer::string($_GET['search']);
