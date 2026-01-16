@@ -117,6 +117,16 @@ class Order
     }
 
     /**
+     * Update fulfillment status
+     */
+    public function updateFulfillmentStatus($id, $fulfillmentStatus)
+    {
+        $sql = "UPDATE orders SET fulfillment_status = :fulfillment_status WHERE id = :id";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([':id' => $id, ':fulfillment_status' => $fulfillmentStatus]);
+    }
+
+    /**
      * Update payment status
      */
     public function updatePaymentStatus($id, $paymentStatus, $transactionId = null)
