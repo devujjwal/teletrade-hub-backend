@@ -638,7 +638,7 @@ class AdminController
     }
 
     /**
-     * Update product
+     * Update product (supports all fields for in-house products)
      */
     public function updateProduct($id)
     {
@@ -653,14 +653,85 @@ class AdminController
         try {
             $updateData = [];
             
+            // Basic fields
+            if (isset($input['name'])) {
+                $updateData['name'] = Sanitizer::string($input['name']);
+            }
+            if (isset($input['ean'])) {
+                $updateData['ean'] = !empty($input['ean']) ? Sanitizer::string($input['ean']) : null;
+            }
+            if (isset($input['description'])) {
+                $updateData['description'] = !empty($input['description']) ? Sanitizer::string($input['description']) : null;
+            }
+            if (isset($input['category_id'])) {
+                $updateData['category_id'] = !empty($input['category_id']) ? intval($input['category_id']) : null;
+            }
+            if (isset($input['brand_id'])) {
+                $updateData['brand_id'] = !empty($input['brand_id']) ? intval($input['brand_id']) : null;
+            }
+            if (isset($input['warranty_id'])) {
+                $updateData['warranty_id'] = !empty($input['warranty_id']) ? intval($input['warranty_id']) : null;
+            }
+            
+            // Pricing
+            if (isset($input['base_price'])) {
+                $updateData['base_price'] = floatval($input['base_price']);
+            }
+            if (isset($input['price'])) {
+                $updateData['price'] = floatval($input['price']);
+            }
+            
+            // Inventory
+            if (isset($input['stock_quantity'])) {
+                $stockQty = intval($input['stock_quantity']);
+                $updateData['stock_quantity'] = $stockQty;
+                $updateData['available_quantity'] = $stockQty; // Update available quantity too
+            }
+            if (isset($input['reorder_point'])) {
+                $updateData['reorder_point'] = intval($input['reorder_point']);
+            }
+            if (isset($input['warehouse_location'])) {
+                $updateData['warehouse_location'] = !empty($input['warehouse_location']) ? Sanitizer::string($input['warehouse_location']) : null;
+            }
+            
+            // Physical properties
+            if (isset($input['weight'])) {
+                $updateData['weight'] = !empty($input['weight']) ? floatval($input['weight']) : null;
+            }
+            if (isset($input['dimensions'])) {
+                $updateData['dimensions'] = !empty($input['dimensions']) ? Sanitizer::string($input['dimensions']) : null;
+            }
+            
+            // Specifications
+            if (isset($input['color'])) {
+                $updateData['color'] = !empty($input['color']) ? Sanitizer::string($input['color']) : null;
+            }
+            if (isset($input['storage'])) {
+                $updateData['storage'] = !empty($input['storage']) ? Sanitizer::string($input['storage']) : null;
+            }
+            if (isset($input['ram'])) {
+                $updateData['ram'] = !empty($input['ram']) ? Sanitizer::string($input['ram']) : null;
+            }
+            if (isset($input['specifications'])) {
+                $updateData['specifications'] = !empty($input['specifications']) ? json_encode($input['specifications']) : null;
+            }
+            
+            // Status
             if (isset($input['is_available'])) {
                 $updateData['is_available'] = $input['is_available'] ? 1 : 0;
             }
             if (isset($input['is_featured'])) {
                 $updateData['is_featured'] = $input['is_featured'] ? 1 : 0;
             }
-            if (isset($input['price'])) {
-                $updateData['price'] = floatval($input['price']);
+            
+            // Language-specific fields
+            foreach (['en', 'de', 'sk', 'fr', 'es', 'ru', 'it', 'tr', 'ro', 'pl'] as $lang) {
+                if (isset($input["name_{$lang}"])) {
+                    $updateData["name_{$lang}"] = !empty($input["name_{$lang}"]) ? Sanitizer::string($input["name_{$lang}"]) : null;
+                }
+                if (isset($input["description_{$lang}"])) {
+                    $updateData["description_{$lang}"] = !empty($input["description_{$lang}"]) ? Sanitizer::string($input["description_{$lang}"]) : null;
+                }
             }
 
             if (empty($updateData)) {
@@ -669,9 +740,24 @@ class AdminController
 
             $this->getProductModel()->update($id, $updateData);
             
+            // Handle image updates if provided
+            if (isset($input['images']) && is_array($input['images'])) {
+                // Delete existing images
+                $db = Database::getConnection();
+                $stmt = $db->prepare("DELETE FROM product_images WHERE product_id = :product_id");
+                $stmt->execute([':product_id' => $id]);
+                
+                // Add new images
+                foreach ($input['images'] as $index => $imageUrl) {
+                    $isPrimary = ($index === 0);
+                    $this->getProductModel()->addImage($id, $imageUrl, null, $isPrimary);
+                }
+            }
+            
             $product = $this->getProductModel()->getById($id);
-            Response::success(['product' => $product], 'Product updated');
+            Response::success(['product' => $product], 'Product updated successfully');
         } catch (Exception $e) {
+            error_log("Update product error: " . $e->getMessage());
             Response::error('Failed to update product: ' . $e->getMessage(), 500);
         }
     }
