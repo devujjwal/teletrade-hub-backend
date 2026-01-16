@@ -6,7 +6,9 @@
  */
 
 require_once __DIR__ . '/../app/Config/env.php';
+require_once __DIR__ . '/../app/Config/database.php';
 require_once __DIR__ . '/../app/Utils/Response.php';
+require_once __DIR__ . '/../app/Utils/Sanitizer.php';
 require_once __DIR__ . '/../app/Middlewares/AuthMiddleware.php';
 
 // CORS headers
@@ -27,6 +29,8 @@ try {
     // Verify admin authentication
     $authMiddleware = new AuthMiddleware();
     $admin = $authMiddleware->verifyAdmin();
+    
+    error_log("Upload request received from admin: " . ($admin['username'] ?? 'unknown'));
     
     if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
         Response::error('No image uploaded or upload error', 400);
@@ -72,6 +76,9 @@ try {
     Response::success(['url' => $imageUrl], 'Image uploaded successfully');
     
 } catch (Exception $e) {
-    error_log("Upload error: " . $e->getMessage());
+    error_log("Upload error (Exception): " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+    Response::error('Upload failed: ' . $e->getMessage(), 500);
+} catch (Error $e) {
+    error_log("Upload error (Error): " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
     Response::error('Upload failed: ' . $e->getMessage(), 500);
 }
