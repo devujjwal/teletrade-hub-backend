@@ -515,10 +515,27 @@ class AdminController
             }
             // For 'cancelled', don't auto-change payment status
             
-            // Admin gets full order details
-            $order = $this->getOrderService()->getOrderDetails($id, true);
-            Response::success(['order' => $order], 'Order status updated');
+            // Try to get full order details, but if it fails, just return success
+            // (The status update has already succeeded at this point)
+            try {
+                $order = $this->getOrderService()->getOrderDetails($id, true);
+                Response::success(['order' => $order], 'Order status updated');
+            } catch (Exception $detailsError) {
+                // Log the error but still return success since the status was updated
+                error_log("UpdateOrderStatus - Failed to fetch order details after update: " . $detailsError->getMessage());
+                Response::success([
+                    'order' => ['id' => $id, 'status' => $newStatus]
+                ], 'Order status updated');
+            }
         } catch (Exception $e) {
+            // Log the actual error for debugging
+            error_log("UpdateOrderStatus Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            error_log("Stack trace: " . $e->getTraceAsString());
+            Response::error('Failed to update order: ' . $e->getMessage(), 500);
+        } catch (Error $e) {
+            // Catch PHP errors too
+            error_log("UpdateOrderStatus PHP Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            error_log("Stack trace: " . $e->getTraceAsString());
             Response::error('Failed to update order: ' . $e->getMessage(), 500);
         }
     }
