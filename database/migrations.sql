@@ -441,13 +441,21 @@ CREATE TABLE IF NOT EXISTS `settings` (
 INSERT INTO `settings` (`key`, `value`, `type`, `description`) VALUES
 ('site_name', 'TeleTrade Hub', 'string', 'Site name'),
 ('site_email', 'info@teletrade-hub.com', 'string', 'Contact email'),
+('address', '', 'string', 'Business address'),
+('contact_number', '', 'string', 'Contact phone number'),
+('whatsapp_number', '', 'string', 'WhatsApp number for customer support'),
 ('currency', 'EUR', 'string', 'Default currency'),
 ('tax_rate', '19.00', 'string', 'VAT rate percentage'),
 ('shipping_cost', '9.99', 'string', 'Default shipping cost'),
 ('free_shipping_threshold', '100.00', 'string', 'Free shipping above this amount'),
 ('vendor_sync_enabled', 'true', 'boolean', 'Enable automatic vendor sync'),
 ('vendor_sync_frequency', '86400', 'integer', 'Sync frequency in seconds (86400 = 24h)'),
-('vendor_sales_order_time', '02:00', 'string', 'Time to create daily vendor sales order')
+('vendor_sales_order_time', '02:00', 'string', 'Time to create daily vendor sales order'),
+('bank_name', '', 'string', 'Bank name for customer payments'),
+('account_holder', '', 'string', 'Bank account holder name'),
+('iban', '', 'string', 'IBAN for bank transfers'),
+('bic', '', 'string', 'BIC/SWIFT code'),
+('bank_additional_info', '', 'string', 'Additional payment instructions for customers')
 ON DUPLICATE KEY UPDATE `key` = `key`;
 
 -- =====================================================

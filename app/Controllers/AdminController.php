@@ -1259,6 +1259,11 @@ class AdminController
                 'address' => $allSettings['address'] ?? '',
                 'contact_number' => $allSettings['contact_number'] ?? '',
                 'whatsapp_number' => $allSettings['whatsapp_number'] ?? '',
+                'bank_name' => $allSettings['bank_name'] ?? '',
+                'account_holder' => $allSettings['account_holder'] ?? '',
+                'iban' => $allSettings['iban'] ?? '',
+                'bic' => $allSettings['bic'] ?? '',
+                'bank_additional_info' => $allSettings['bank_additional_info'] ?? '',
             ];
             
             Response::success($publicSettings);
