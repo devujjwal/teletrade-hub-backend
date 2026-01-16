@@ -289,7 +289,7 @@ class Product
             category_id, brand_id, warranty_id, base_price, price, currency,
             stock_quantity, available_quantity, reserved_quantity, reorder_point, warehouse_location,
             is_available, is_featured, weight, dimensions,
-            color, storage, ram, specifications, slug, last_synced_at
+            color, storage, ram, specifications, meta_title, meta_description, slug, last_synced_at
         ) VALUES (
             :product_source, :vendor_article_id, :sku, :ean, :name, 
             :name_en, :name_de, :name_sk, :name_fr, :name_es, :name_ru, :name_it, :name_tr, :name_ro, :name_pl,
@@ -298,7 +298,7 @@ class Product
             :category_id, :brand_id, :warranty_id, :base_price, :price, :currency,
             :stock_quantity, :available_quantity, :reserved_quantity, :reorder_point, :warehouse_location,
             :is_available, :is_featured, :weight, :dimensions,
-            :color, :storage, :ram, :specifications, :slug, :last_synced_at
+            :color, :storage, :ram, :specifications, :meta_title, :meta_description, :slug, :last_synced_at
         )";
 
         $stmt = $this->db->prepare($sql);
@@ -323,7 +323,8 @@ class Product
             'category_id', 'brand_id', 'warranty_id', 'base_price', 'price', 'currency',
             'stock_quantity', 'available_quantity', 'reserved_quantity', 'reorder_point', 
             'warehouse_location', 'is_available', 'is_featured', 'weight', 
-            'dimensions', 'color', 'storage', 'ram', 'specifications', 'slug', 'last_synced_at'
+            'dimensions', 'color', 'storage', 'ram', 'specifications', 'meta_title', 
+            'meta_description', 'slug', 'last_synced_at'
         ];
         
         $fields = [];

@@ -464,6 +464,8 @@ class ProductSyncService
             ':storage' => $storage,
             ':ram' => $ram,
             ':specifications' => !empty($specifications) ? json_encode($specifications) : null,
+            ':meta_title' => null,
+            ':meta_description' => null,
             ':last_synced_at' => date('Y-m-d H:i:s')
         ];
         

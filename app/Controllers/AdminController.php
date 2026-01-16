@@ -630,6 +630,8 @@ class AdminController
                 ':storage' => !empty($input['storage']) ? Sanitizer::string($input['storage']) : null,
                 ':ram' => !empty($input['ram']) ? Sanitizer::string($input['ram']) : null,
                 ':specifications' => !empty($input['specifications']) ? json_encode($input['specifications']) : null,
+                ':meta_title' => !empty($input['meta_title']) ? Sanitizer::string($input['meta_title']) : null,
+                ':meta_description' => !empty($input['meta_description']) ? Sanitizer::string($input['meta_description']) : null,
                 ':last_synced_at' => null,
             ];
 
