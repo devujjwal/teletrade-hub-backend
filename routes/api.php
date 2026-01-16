@@ -203,6 +203,7 @@ $router->put('admin/orders/{id}/status', 'AdminController', 'updateOrderStatus')
 
 // Admin Products
 $router->get('admin/products', 'AdminController', 'products');
+$router->get('admin/products/{id}', 'AdminController', 'getProduct');
 $router->post('admin/products', 'AdminController', 'createProduct');
 $router->put('admin/products/{id}', 'AdminController', 'updateProduct');
 

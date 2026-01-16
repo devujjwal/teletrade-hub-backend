@@ -560,6 +560,27 @@ class AdminController
     }
 
     /**
+     * Get single product by ID
+     */
+    public function getProduct($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        try {
+            $product = $this->getProductModel()->getById($id);
+            
+            if (!$product) {
+                Response::notFound('Product not found');
+            }
+            
+            Response::success(['product' => $product]);
+        } catch (Exception $e) {
+            error_log("Get product error: " . $e->getMessage());
+            Response::error('Failed to load product: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Create product (for in-house products)
      */
     public function createProduct()
