@@ -195,31 +195,61 @@ class OrderController
         // 2. Guest order accessed with valid token (generated from order details)
         // 3. Admin accessing (via separate admin endpoint)
         
-        $userId = $_GET['user_id'] ?? null;
-        $guestToken = $_GET['guest_token'] ?? null;
-        $guestEmail = $_GET['guest_email'] ?? null; // Fallback for backward compatibility
-        
         $hasAccess = false;
+        $userId = null;
         
+        // Try to get authenticated user from token
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        
+        if (!empty($authHeader) && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            $token = $matches[1];
+            
+            // Validate token and get user
+            try {
+                $db = Database::getConnection();
+                $sql = "SELECT us.user_id
+                        FROM user_sessions us
+                        WHERE us.token = :token 
+                        AND us.expires_at > NOW()";
+                
+                $stmt = $db->prepare($sql);
+                $stmt->execute([':token' => $token]);
+                $session = $stmt->fetch();
+                
+                if ($session) {
+                    $userId = $session['user_id'];
+                }
+            } catch (Exception $e) {
+                // Token validation failed, continue to check guest access
+            }
+        }
+        
+        // Check access rights
         // Registered user access
         if ($userId && $order['user_id'] && $order['user_id'] == intval($userId)) {
             $hasAccess = true;
         }
-        // Guest access with token (preferred method)
-        elseif ($guestToken && $order['guest_email']) {
-            $expectedToken = $this->generateGuestOrderToken($order['order_number'], $order['guest_email']);
-            if (hash_equals($expectedToken, $guestToken)) {
-                $hasAccess = true;
+        // Guest access with token (from query params)
+        else {
+            $guestToken = $_GET['guest_token'] ?? null;
+            $guestEmail = $_GET['guest_email'] ?? null; // Fallback for backward compatibility
+            
+            if ($guestToken && $order['guest_email']) {
+                $expectedToken = $this->generateGuestOrderToken($order['order_number'], $order['guest_email']);
+                if (hash_equals($expectedToken, $guestToken)) {
+                    $hasAccess = true;
+                }
             }
-        }
-        // Guest access with email (fallback - less secure)
-        elseif ($guestEmail && $order['guest_email']) {
-            // SECURITY: Use timing-safe comparison
-            if (hash_equals(
-                strtolower(trim($order['guest_email'])), 
-                strtolower(trim($guestEmail))
-            )) {
-                $hasAccess = true;
+            // Guest access with email (fallback - less secure)
+            elseif ($guestEmail && $order['guest_email']) {
+                // SECURITY: Use timing-safe comparison
+                if (hash_equals(
+                    strtolower(trim($order['guest_email'])), 
+                    strtolower(trim($guestEmail))
+                )) {
+                    $hasAccess = true;
+                }
             }
         }
         
