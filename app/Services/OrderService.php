@@ -62,6 +62,7 @@ class OrderService
                 ':guest_email' => $orderData['guest_email'] ?? null,
                 ':status' => 'pending',
                 ':payment_status' => 'unpaid',
+                ':fulfillment_status' => 'pending',
                 ':payment_method' => $orderData['payment_method'] ?? null,
                 ':subtotal' => $totals['subtotal'],
                 ':tax' => $totals['tax'],
