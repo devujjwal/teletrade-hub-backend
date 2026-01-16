@@ -139,10 +139,14 @@ class Order
      */
     public function updatePaymentStatus($id, $paymentStatus, $transactionId = null)
     {
+        // Build the SQL dynamically to handle the paid_at timestamp correctly
+        // We can't use a bound parameter in the CASE WHEN comparison
+        $setPaidAt = ($paymentStatus === 'paid') ? 'paid_at = CURRENT_TIMESTAMP' : 'paid_at = paid_at';
+        
         $sql = "UPDATE orders SET 
                 payment_status = :payment_status,
                 payment_transaction_id = :transaction_id,
-                paid_at = CASE WHEN :payment_status = 'paid' THEN CURRENT_TIMESTAMP ELSE paid_at END
+                {$setPaidAt}
                 WHERE id = :id";
         
         $stmt = $this->db->prepare($sql);

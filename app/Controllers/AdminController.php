@@ -506,11 +506,21 @@ class AdminController
             // - cancelled = keep current payment status (could be refunded separately)
             if ($newStatus === 'pending') {
                 // Setting to pending means payment not yet confirmed
-                $orderModel->updatePaymentStatus($id, 'unpaid');
+                error_log("Updating payment status to 'unpaid' for order $id");
+                $paymentResult = $orderModel->updatePaymentStatus($id, 'unpaid');
+                error_log("Payment status update result: " . ($paymentResult ? 'success' : 'failed'));
             } elseif (in_array($newStatus, ['processing', 'shipped', 'delivered'])) {
                 // These statuses indicate order is being fulfilled, so payment must be confirmed
                 if ($currentOrder['payment_status'] !== 'paid') {
-                    $orderModel->updatePaymentStatus($id, 'paid');
+                    error_log("Updating payment status to 'paid' for order $id (current status: {$currentOrder['payment_status']})");
+                    $paymentResult = $orderModel->updatePaymentStatus($id, 'paid');
+                    error_log("Payment status update result: " . ($paymentResult ? 'success' : 'failed'));
+                    
+                    if (!$paymentResult) {
+                        error_log("WARNING: Payment status update failed for order $id");
+                    }
+                } else {
+                    error_log("Payment status already 'paid' for order $id, skipping update");
                 }
             }
             // For 'cancelled', don't auto-change payment status
