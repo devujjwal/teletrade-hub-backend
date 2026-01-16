@@ -457,6 +457,7 @@ class ProductSyncService
             ':stock_quantity' => $stockQuantity,
             ':available_quantity' => $stockQuantity,
             ':is_available' => $stockQuantity > 0 ? 1 : 0,
+            ':is_featured' => 0,
             ':weight' => null,
             ':dimensions' => null,
             // Store base color (English) in main color field, translations in specifications
