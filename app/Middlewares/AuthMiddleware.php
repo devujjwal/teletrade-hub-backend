@@ -18,12 +18,31 @@ class AuthMiddleware
     }
 
     /**
+     * Get all HTTP headers (polyfill for getallheaders)
+     */
+    private function getAllHeaders()
+    {
+        if (function_exists('getallheaders')) {
+            return getallheaders();
+        }
+        
+        // Fallback for environments where getallheaders() doesn't exist
+        $headers = [];
+        foreach ($_SERVER as $name => $value) {
+            if (substr($name, 0, 5) == 'HTTP_') {
+                $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+            }
+        }
+        return $headers;
+    }
+
+    /**
      * Verify admin authentication
      */
     public function verifyAdmin()
     {
         // Get authorization header
-        $headers = getallheaders();
+        $headers = $this->getAllHeaders();
         $authHeader = $headers['Authorization'] ?? '';
 
         if (empty($authHeader)) {
