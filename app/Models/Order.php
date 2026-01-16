@@ -77,7 +77,14 @@ class Order
      */
     public function getOrderItems($orderId)
     {
-        $sql = "SELECT * FROM order_items WHERE order_id = :order_id";
+        $sql = "SELECT 
+                    oi.*,
+                    pi.image_url as product_image
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.id
+                LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = 1
+                WHERE oi.order_id = :order_id
+                ORDER BY oi.id ASC";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':order_id' => $orderId]);
         return $stmt->fetchAll();
