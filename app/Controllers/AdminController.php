@@ -487,7 +487,33 @@ class AdminController
         }
 
         try {
-            $this->getOrderModel()->updateStatus($id, $input['status']);
+            $newStatus = $input['status'];
+            $orderModel = $this->getOrderModel();
+            
+            // Get current order to check current status
+            $currentOrder = $orderModel->getById($id);
+            if (!$currentOrder) {
+                Response::notFound('Order not found');
+            }
+            
+            // Update order status
+            $orderModel->updateStatus($id, $newStatus);
+            
+            // Auto-update payment status based on order status
+            // Logic: 
+            // - pending = unpaid (customer needs to pay)
+            // - processing/shipped/delivered = paid (order is being fulfilled, payment must be confirmed)
+            // - cancelled = keep current payment status (could be refunded separately)
+            if ($newStatus === 'pending') {
+                // Setting to pending means payment not yet confirmed
+                $orderModel->updatePaymentStatus($id, 'unpaid');
+            } elseif (in_array($newStatus, ['processing', 'shipped', 'delivered'])) {
+                // These statuses indicate order is being fulfilled, so payment must be confirmed
+                if ($currentOrder['payment_status'] !== 'paid') {
+                    $orderModel->updatePaymentStatus($id, 'paid');
+                }
+            }
+            // For 'cancelled', don't auto-change payment status
             
             // Admin gets full order details
             $order = $this->getOrderService()->getOrderDetails($id, true);
