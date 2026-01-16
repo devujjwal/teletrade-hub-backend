@@ -275,7 +275,30 @@ class ProductSyncService
 
     /**
      * Sync single product
+     * 
      * IMPORTANT: Only syncs vendor products, skips own products
+     * 
+     * WHAT GETS UPDATED DURING SYNC (for existing products):
+     * ✅ base_price - Vendor's cost price (always updated)
+     * ✅ price - Customer price with markup (updated if not manually adjusted)
+     * ✅ stock_quantity - Current stock from vendor (always updated)
+     * ✅ available_quantity - Same as stock_quantity (always updated)
+     * ✅ is_available - Calculated from stock (always updated)
+     * ✅ name - Product name in all languages (always updated)
+     * ✅ category_id, brand_id, warranty_id - Product categorization (always updated)
+     * ✅ color, storage, ram - Product attributes (always updated)
+     * ✅ specifications - Product specs and translations (merged)
+     * ✅ last_synced_at - Sync timestamp (always updated)
+     * 
+     * WHAT IS PRESERVED (NOT overwritten):
+     * 🔒 is_featured - Admin's manual featured selection (preserved)
+     * 🔒 price - If manually adjusted by admin (preserved if >1% difference)
+     * 🔒 product_source - Own products are never synced (protected)
+     * 
+     * NEW PRODUCTS:
+     * - All fields are set from vendor data
+     * - is_featured = 0 (default, admin can change later)
+     * - price calculated from base_price + markup rules
      */
     private function syncSingleProduct($vendorProduct, &$stats, $languageId = 1)
     {
@@ -313,6 +336,29 @@ class ProductSyncService
             // Ensure slug exists for existing products (in case it was created before slug generation)
             if (empty($normalized[':slug']) && empty($existingProduct['slug']) && $languageId == 1) {
                 $normalized[':slug'] = $this->generateSlug($normalized[':name']);
+            }
+            
+            // PRESERVE admin-managed fields when updating existing products
+            // These fields should NOT be overwritten by vendor sync:
+            // - is_featured: Admin manually sets featured products
+            // - price: May have manual adjustments (though normally calculated from base_price)
+            unset($normalized[':is_featured']); // Preserve admin's featured selection
+            
+            // If admin has manually set a custom price, preserve it
+            // Check if there's a significant difference from calculated price (more than 1%)
+            if (isset($existingProduct['price']) && isset($existingProduct['base_price'])) {
+                $expectedPrice = $this->pricingService->calculatePrice(
+                    $existingProduct['base_price'], 
+                    $existingProduct['category_id'], 
+                    $existingProduct['brand_id']
+                );
+                $priceDiff = abs($existingProduct['price'] - $expectedPrice);
+                $percentDiff = ($expectedPrice > 0) ? ($priceDiff / $expectedPrice * 100) : 0;
+                
+                // If price was manually adjusted by more than 1%, preserve it
+                if ($percentDiff > 1) {
+                    unset($normalized[':price']); // Keep custom price
+                }
             }
             
             // Merge color translations if updating with new language data
