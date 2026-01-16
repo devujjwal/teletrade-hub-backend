@@ -223,8 +223,13 @@ CREATE TABLE IF NOT EXISTS `admin_users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Create default admin user (password: Admin@123456)
+-- Default admin credentials:
+-- Username: admin
+-- Password: Ujjwal@2026
+-- Note: Password hash below is for 'Ujjwal@2026'
+-- To regenerate: php public/generate-password-hash.php
 INSERT INTO `admin_users` (`username`, `email`, `password_hash`, `full_name`, `role`, `is_active`)
-VALUES ('admin', 'admin@teletrade-hub.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'super_admin', 1)
+VALUES ('admin', 'tctradingek@gmail.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'super_admin', 1)
 ON DUPLICATE KEY UPDATE `username` = `username`;
 
 -- Admin Sessions
@@ -439,11 +444,11 @@ CREATE TABLE IF NOT EXISTS `settings` (
 
 -- Insert default settings
 INSERT INTO `settings` (`key`, `value`, `type`, `description`) VALUES
-('site_name', 'TeleTrade Hub', 'string', 'Site name'),
-('site_email', 'info@teletrade-hub.com', 'string', 'Contact email'),
-('address', '', 'string', 'Business address'),
-('contact_number', '', 'string', 'Contact phone number'),
-('whatsapp_number', '', 'string', 'WhatsApp number for customer support'),
+('site_name', 'Telecommunication Trading e.K.', 'string', 'Site name'),
+('site_email', 'tctradingek@gmail.com', 'string', 'Contact email'),
+('address', 'Marienstraße 20, Stuttgart, Deutschland, Germany - 70178', 'string', 'Business address'),
+('contact_number', '+491737109267', 'string', 'Contact phone number'),
+('whatsapp_number', '+491737109267', 'string', 'WhatsApp number for customer support'),
 ('currency', 'EUR', 'string', 'Default currency'),
 ('tax_rate', '19.00', 'string', 'VAT rate percentage'),
 ('shipping_cost', '9.99', 'string', 'Default shipping cost'),
