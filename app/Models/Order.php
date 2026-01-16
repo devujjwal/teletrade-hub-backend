@@ -79,7 +79,8 @@ class Order
     {
         $sql = "SELECT 
                     oi.*,
-                    pi.image_url as product_image
+                    pi.image_url as product_image,
+                    p.slug as product_slug
                 FROM order_items oi
                 LEFT JOIN products p ON oi.product_id = p.id
                 LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = 1

@@ -235,7 +235,15 @@ class Product
         $stmt->execute([':slug' => $slug]);
         $product = $stmt->fetch();
 
-        // If not found by slug, try by vendor_article_id (in case slug is actually a SKU)
+        // If not found by slug, try by ID (if numeric)
+        if (!$product && is_numeric($slug)) {
+            $sql = "SELECT * FROM product_list_view WHERE id = :id";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':id' => intval($slug)]);
+            $product = $stmt->fetch();
+        }
+
+        // If not found by slug or ID, try by vendor_article_id or SKU
         if (!$product) {
             $sql = "SELECT * FROM product_list_view WHERE vendor_article_id = :slug OR sku = :slug";
             $stmt = $this->db->prepare($sql);
