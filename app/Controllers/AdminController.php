@@ -1299,5 +1299,76 @@ class AdminController
             Response::error('Failed to update settings: ' . $e->getMessage(), 500);
         }
     }
+
+    /**
+     * Change admin password
+     */
+    public function changePassword()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        if (empty($input['current_password']) || empty($input['new_password'])) {
+            Response::error('Current password and new password are required', 400);
+        }
+
+        try {
+            // Verify current password
+            $stmt = $this->db->prepare("SELECT password_hash FROM admin_users WHERE id = :id");
+            $stmt->execute([':id' => $admin['id']]);
+            $result = $stmt->fetch();
+            
+            if (!$result || !password_verify($input['current_password'], $result['password_hash'])) {
+                Response::error('Current password is incorrect', 401);
+            }
+
+            // Validate new password
+            if (strlen($input['new_password']) < 6) {
+                Response::error('New password must be at least 6 characters long', 400);
+            }
+
+            // Hash and update new password
+            $newPasswordHash = password_hash($input['new_password'], PASSWORD_BCRYPT);
+            $stmt = $this->db->prepare("UPDATE admin_users SET password_hash = :password_hash WHERE id = :id");
+            $stmt->execute([
+                ':password_hash' => $newPasswordHash,
+                ':id' => $admin['id']
+            ]);
+
+            Response::success(null, 'Password changed successfully');
+        } catch (Exception $e) {
+            error_log("Change password error: " . $e->getMessage());
+            Response::error('Failed to change password: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Reset admin password to default (Ujjwal@2026)
+     */
+    public function resetPasswordToDefault()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        
+        try {
+            $defaultPassword = 'Ujjwal@2026';
+            $passwordHash = password_hash($defaultPassword, PASSWORD_BCRYPT);
+            
+            $stmt = $this->db->prepare("UPDATE admin_users SET password_hash = :password_hash WHERE id = :id");
+            $stmt->execute([
+                ':password_hash' => $passwordHash,
+                ':id' => $admin['id']
+            ]);
+
+            Response::success(null, 'Password reset to default successfully');
+        } catch (Exception $e) {
+            error_log("Reset password error: " . $e->getMessage());
+            Response::error('Failed to reset password: ' . $e->getMessage(), 500);
+        }
+    }
 }
 

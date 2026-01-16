@@ -235,6 +235,10 @@ $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSales
 $router->get('admin/settings', 'AdminController', 'getSettings');
 $router->put('admin/settings', 'AdminController', 'updateSettings');
 
+// Admin Password Management
+$router->put('admin/change-password', 'AdminController', 'changePassword');
+$router->post('admin/reset-password', 'AdminController', 'resetPasswordToDefault');
+
 // Debug Routes (Temporary - Remove in production)
 $router->get('admin/debug/database', 'AdminController', 'debugDatabase');
 $router->get('admin/debug/vendor-api', 'AdminController', 'debugVendorApi');
