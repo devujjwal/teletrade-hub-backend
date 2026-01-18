@@ -591,7 +591,6 @@ Create a new order
 ```json
 {
   "user_id": 1,
-  "guest_email": "guest@example.com",
   "cart_items": [
     {
       "product_id": 1,
@@ -637,8 +636,7 @@ Create a new order
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `user_id` | integer | No | Registered user ID (omit for guest) |
-| `guest_email` | string | No* | Required if user_id not provided |
+| `user_id` | integer | Yes | Registered user ID (authentication required) |
 | `cart_items` | array | Yes | Array of cart items |
 | `billing_address` | object | Yes | Billing address details |
 | `shipping_address` | object | No | Shipping address (uses billing if not provided) |
@@ -655,7 +653,6 @@ Create a new order
       "id": 123,
       "order_number": "ORD-2026-00123",
       "user_id": 1,
-      "guest_email": null,
       "total_amount": 3199.97,
       "subtotal": 3199.97,
       "tax_amount": 0.00,
@@ -707,13 +704,13 @@ Get order details
 **Path Parameters:**
 - `orderId` (string, required): Order number (e.g., ORD-2026-00123)
 
-**Query Parameters:**
-- `user_id` (integer, optional): For registered user orders
-- `guest_email` (string, optional): For guest orders
+**Authentication:**
+- Requires Bearer token in Authorization header
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/orders/ORD-2026-00123?user_id=1"
+curl "https://api.vs-mjrinfotech.com/orders/ORD-2026-00123" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
 **Success Response:**
@@ -725,7 +722,6 @@ curl "https://api.vs-mjrinfotech.com/orders/ORD-2026-00123?user_id=1"
       "id": 123,
       "order_number": "ORD-2026-00123",
       "user_id": 1,
-      "guest_email": null,
       "total_amount": 3199.97,
       "subtotal": 3199.97,
       "tax_amount": 0.00,

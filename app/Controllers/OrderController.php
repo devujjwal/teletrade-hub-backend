@@ -20,6 +20,7 @@ class OrderController
 
     /**
      * Create new order
+     * Requires user authentication
      */
     public function create()
     {
@@ -33,7 +34,8 @@ class OrderController
         // Validate required fields
         $errors = Validator::validate($input, [
             'cart_items' => 'required',
-            'payment_method' => 'required'
+            'payment_method' => 'required',
+            'user_id' => 'required'
         ]);
 
         if (!empty($errors)) {
@@ -46,16 +48,13 @@ class OrderController
         }
 
         try {
-            // Validate and sanitize user_id
-            // Only set user_id if it's provided AND the user exists in database
-            $userId = null;
-            if (!empty($input['user_id'])) {
-                $userModel = new User();
-                $user = $userModel->getById($input['user_id']);
-                if ($user) {
-                    $userId = $input['user_id'];
-                }
+            // Validate user exists
+            $userModel = new User();
+            $user = $userModel->getById($input['user_id']);
+            if (!$user) {
+                Response::error('User not found. Please login to place an order.', 401);
             }
+            $userId = $input['user_id'];
 
             $orderModel = new Order();
             
@@ -65,9 +64,6 @@ class OrderController
             
             if (!empty($input['billing_address_id'])) {
                 // Use existing address
-                if (!$userId) {
-                    Response::error('Cannot use saved address for guest checkout', 400);
-                }
                 if (!$orderModel->validateAddressOwnership($input['billing_address_id'], $userId)) {
                     Response::error('Invalid billing address', 403);
                 }
@@ -113,9 +109,6 @@ class OrderController
             
             if (!empty($input['shipping_address_id'])) {
                 // Use existing address
-                if (!$userId) {
-                    Response::error('Cannot use saved address for guest checkout', 400);
-                }
                 if (!$orderModel->validateAddressOwnership($input['shipping_address_id'], $userId)) {
                     Response::error('Invalid shipping address', 403);
                 }
@@ -142,7 +135,6 @@ class OrderController
             // Create order
             $orderData = [
                 'user_id' => $userId,
-                'guest_email' => $input['guest_email'] ?? null,
                 'payment_method' => Sanitizer::string($input['payment_method']),
                 'notes' => Sanitizer::string($input['notes'] ?? '')
             ];
@@ -213,7 +205,7 @@ class OrderController
 
     /**
      * Get order details
-     * SECURITY: Validate order ownership or guest token access
+     * SECURITY: Requires authentication and validates order ownership
      */
     public function show($orderNumber)
     {
@@ -224,70 +216,43 @@ class OrderController
         }
 
         // SECURITY CRITICAL: Validate access rights
-        // Allow access if:
-        // 1. Authenticated user owns the order (user_id matches)
-        // 2. Guest order accessed with valid token (generated from order details)
-        // 3. Admin accessing (via separate admin endpoint)
+        // Only authenticated users can access their orders
         
-        $hasAccess = false;
         $userId = null;
         
-        // Try to get authenticated user from token
+        // Get authenticated user from token
         $headers = getallheaders();
         $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
         
-        if (!empty($authHeader) && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
-            $token = $matches[1];
-            
-            // Validate token and get user
-            try {
-                $db = Database::getConnection();
-                $sql = "SELECT us.user_id
-                        FROM user_sessions us
-                        WHERE us.token = :token 
-                        AND us.expires_at > NOW()";
-                
-                $stmt = $db->prepare($sql);
-                $stmt->execute([':token' => $token]);
-                $session = $stmt->fetch();
-                
-                if ($session) {
-                    $userId = $session['user_id'];
-                }
-            } catch (Exception $e) {
-                // Token validation failed, continue to check guest access
-            }
+        if (empty($authHeader) || !preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            Response::unauthorized('Authentication required to view order');
         }
         
-        // Check access rights
-        // Registered user access
-        if ($userId && $order['user_id'] && $order['user_id'] == intval($userId)) {
-            $hasAccess = true;
-        }
-        // Guest access with token (from query params)
-        else {
-            $guestToken = $_GET['guest_token'] ?? null;
-            $guestEmail = $_GET['guest_email'] ?? null; // Fallback for backward compatibility
+        $token = $matches[1];
+        
+        // Validate token and get user
+        try {
+            $db = Database::getConnection();
+            $sql = "SELECT us.user_id
+                    FROM user_sessions us
+                    WHERE us.token = :token 
+                    AND us.expires_at > NOW()";
             
-            if ($guestToken && $order['guest_email']) {
-                $expectedToken = $this->generateGuestOrderToken($order['order_number'], $order['guest_email']);
-                if (hash_equals($expectedToken, $guestToken)) {
-                    $hasAccess = true;
-                }
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':token' => $token]);
+            $session = $stmt->fetch();
+            
+            if (!$session) {
+                Response::unauthorized('Invalid or expired token');
             }
-            // Guest access with email (fallback - less secure)
-            elseif ($guestEmail && $order['guest_email']) {
-                // SECURITY: Use timing-safe comparison
-                if (hash_equals(
-                    strtolower(trim($order['guest_email'])), 
-                    strtolower(trim($guestEmail))
-                )) {
-                    $hasAccess = true;
-                }
-            }
+            
+            $userId = $session['user_id'];
+        } catch (Exception $e) {
+            Response::error('Authentication failed', 401);
         }
         
-        if (!$hasAccess) {
+        // Verify user owns this order
+        if (!$order['user_id'] || $order['user_id'] != intval($userId)) {
             Response::forbidden('You do not have permission to access this order');
         }
 
@@ -295,22 +260,6 @@ class OrderController
         $fullOrder = $this->orderService->getOrderDetails($order['id'], false);
 
         Response::success(['order' => $fullOrder]);
-    }
-    
-    /**
-     * Generate secure token for guest order access
-     * SECURITY: Uses order number, email, and secret key
-     * Must match the implementation in OrderService
-     */
-    private function generateGuestOrderToken($orderNumber, $guestEmail)
-    {
-        if (!class_exists('Env')) {
-            require_once __DIR__ . '/../Config/env.php';
-        }
-        
-        $secret = Env::get('APP_KEY', 'default-secret-change-in-production');
-        $data = $orderNumber . '|' . strtolower(trim($guestEmail)) . '|' . $secret;
-        return hash_hmac('sha256', $data, $secret);
     }
 
     /**

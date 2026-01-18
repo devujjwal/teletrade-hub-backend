@@ -74,8 +74,8 @@ class OrderService
             // Create order
             $orderId = $this->orderModel->create([
                 ':order_number' => $orderNumber,
-                ':user_id' => $orderData['user_id'] ?? null,
-                ':guest_email' => $orderData['guest_email'] ?? null,
+                ':user_id' => $orderData['user_id'],
+                ':guest_email' => null,
                 ':status' => 'pending',
                 ':payment_status' => 'unpaid',
                 ':fulfillment_status' => 'pending',
@@ -144,50 +144,21 @@ class OrderService
             
             // Update order fulfillment status
             $this->orderModel->updateFulfillmentStatus($orderId, $fulfillmentStatus);
-
-            // Generate guest access token if this is a guest order
-            $guestToken = null;
-            if (!empty($orderData['guest_email']) && empty($orderData['user_id'])) {
-                $guestToken = $this->generateGuestOrderToken($orderNumber, $orderData['guest_email']);
-            }
             
             // Return customer-friendly response (no internal details)
-            $response = [
+            return [
                 'order_id' => $orderId,
                 'order_number' => $orderNumber,
                 'total' => $totals['total'],
                 'status' => 'pending',
                 'message' => 'Order created successfully. Please proceed with payment.'
             ];
-            
-            // SECURITY: Include guest token for guest orders (store securely on client)
-            if ($guestToken) {
-                $response['guest_token'] = $guestToken;
-                $response['message'] .= ' Save your order access token to track your order.';
-            }
-            
-            return $response;
         } catch (Exception $e) {
             $this->db->rollBack();
             throw $e;
         }
     }
     
-    /**
-     * Generate secure token for guest order access
-     * SECURITY: Uses order number, email, and secret key
-     */
-    private function generateGuestOrderToken($orderNumber, $guestEmail)
-    {
-        if (!class_exists('Env')) {
-            require_once __DIR__ . '/../Config/env.php';
-        }
-        
-        $secret = Env::get('APP_KEY', 'default-secret-change-in-production');
-        $data = $orderNumber . '|' . strtolower(trim($guestEmail)) . '|' . $secret;
-        return hash_hmac('sha256', $data, $secret);
-    }
-
     /**
      * Process payment success
      * Handles mixed orders: reserves vendor products, deducts stock for own products
@@ -473,9 +444,14 @@ class OrderService
             throw new Exception('No vendor items to process');
         }
 
+        // Get user email from order
+        $userModel = new User();
+        $user = $userModel->getById($order['user_id']);
+        $customerEmail = $user ? $user['email'] : 'customer@teletrade-hub.com';
+        
         $orderData = [
             'orderNumber' => $order['order_number'],
-            'customerEmail' => $order['guest_email'] ?? 'customer@teletrade-hub.com',
+            'customerEmail' => $customerEmail,
             'items' => [],
             'shippingAddress' => $this->orderModel->getFullOrder($order['id'])['shipping_address'] ?? []
         ];

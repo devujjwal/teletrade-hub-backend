@@ -23,6 +23,12 @@ class OrderServiceTest extends TestCase
     
     private function setupTestData()
     {
+        // Insert test user
+        $this->db->exec("
+            INSERT INTO users (id, email, password_hash, first_name, last_name, phone, is_active)
+            VALUES (1, 'test@example.com', 'hash', 'John', 'Doe', '+49123456789', 1)
+        ");
+        
         // Insert test categories and brands
         $this->db->exec("INSERT INTO categories (id, name, slug) VALUES (1, 'Smartphones', 'smartphones')");
         $this->db->exec("INSERT INTO brands (id, name, slug) VALUES (1, 'Apple', 'apple')");
@@ -43,7 +49,7 @@ class OrderServiceTest extends TestCase
     public function testCreateOrderSuccess()
     {
         $orderData = [
-            'guest_email' => 'customer@example.com',
+            'user_id' => 1,
             'payment_method' => 'credit_card',
             'notes' => 'Please deliver after 5 PM'
         ];
@@ -54,7 +60,7 @@ class OrderServiceTest extends TestCase
         ];
         
         $billingAddress = [
-            ':user_id' => null,
+            ':user_id' => 1,
             ':first_name' => 'John',
             ':last_name' => 'Doe',
             ':company' => '',
@@ -68,7 +74,7 @@ class OrderServiceTest extends TestCase
             ':is_default' => 0
         ];
         
-        $result = $this->orderService->createOrder($orderData, $cartItems, $billingAddress, null);
+        $result = $this->orderService->createOrder($orderData, $cartItems, null, $billingAddress, null, null);
         
         $this->assertIsArray($result);
         $this->assertArrayHasKey('order_id', $result);
@@ -90,7 +96,7 @@ class OrderServiceTest extends TestCase
      */
     public function testCreateOrderUnavailableProduct()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 3, 'quantity' => 1]]; // Out of stock product
         $billingAddress = $this->getTestAddress();
         
@@ -105,7 +111,7 @@ class OrderServiceTest extends TestCase
      */
     public function testCreateOrderInsufficientStock()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 2, 'quantity' => 100]]; // More than available
         $billingAddress = $this->getTestAddress();
         
@@ -120,7 +126,7 @@ class OrderServiceTest extends TestCase
      */
     public function testOrderTotalsCalculation()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         
         // Product 1: 1035.00 * 1 = 1035.00
         // Product 2: 920.00 * 1 = 920.00
@@ -157,7 +163,7 @@ class OrderServiceTest extends TestCase
         // Update free shipping threshold
         $this->db->exec("UPDATE settings SET value = '50' WHERE key = 'free_shipping_threshold'");
         
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 1, 'quantity' => 1]]; // Total will be > 50
         $billingAddress = $this->getTestAddress();
         
@@ -285,7 +291,7 @@ class OrderServiceTest extends TestCase
      */
     public function testOrderItemsCreated()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [
             ['product_id' => 1, 'quantity' => 2],
             ['product_id' => 2, 'quantity' => 1]
@@ -317,7 +323,7 @@ class OrderServiceTest extends TestCase
      */
     public function testOrderNumberUniqueness()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 1, 'quantity' => 1]];
         $billingAddress = $this->getTestAddress();
         
@@ -332,7 +338,7 @@ class OrderServiceTest extends TestCase
      */
     public function testBasePriceNotExposed()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 1, 'quantity' => 1]];
         $billingAddress = $this->getTestAddress();
         
@@ -352,7 +358,7 @@ class OrderServiceTest extends TestCase
      */
     public function testEmptyCart()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [];
         $billingAddress = $this->getTestAddress();
         
@@ -366,7 +372,7 @@ class OrderServiceTest extends TestCase
      */
     public function testNegativeQuantity()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 1, 'quantity' => -1]];
         $billingAddress = $this->getTestAddress();
         
@@ -380,7 +386,7 @@ class OrderServiceTest extends TestCase
      */
     private function createTestOrder()
     {
-        $orderData = ['guest_email' => 'test@example.com', 'payment_method' => 'credit_card'];
+        $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 1, 'quantity' => 1]];
         $billingAddress = $this->getTestAddress();
         

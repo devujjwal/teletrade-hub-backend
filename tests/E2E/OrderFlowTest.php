@@ -78,7 +78,7 @@ class OrderFlowTest extends TestCase
         
         // STEP 3: Customer creates order
         $orderData = [
-            'guest_email' => 'customer@example.com',
+            'user_id' => 1,
             'payment_method' => 'credit_card',
             'notes' => 'Please deliver between 9 AM - 5 PM',
             'cart_items' => [
@@ -167,7 +167,7 @@ class OrderFlowTest extends TestCase
         $orderService = new OrderService();
         
         $orderData = [
-            'guest_email' => 'customer@example.com',
+            'user_id' => 1,
             'payment_method' => 'credit_card'
         ];
         
@@ -212,7 +212,7 @@ class OrderFlowTest extends TestCase
         $orderService = new OrderService();
         
         $orderData = [
-            'guest_email' => 'customer@example.com',
+            'user_id' => 1,
             'payment_method' => 'credit_card'
         ];
         
@@ -258,7 +258,7 @@ class OrderFlowTest extends TestCase
         $orderService = new OrderService();
         
         $order1 = $orderService->createOrder(
-            ['guest_email' => 'customer1@example.com', 'payment_method' => 'credit_card'],
+            ['user_id' => 1, 'payment_method' => 'credit_card'],
             [['product_id' => 1, 'quantity' => 2]],
             $this->getTestAddress(),
             null
@@ -276,7 +276,7 @@ class OrderFlowTest extends TestCase
         
         // Create second order
         $order2 = $orderService->createOrder(
-            ['guest_email' => 'customer2@example.com', 'payment_method' => 'credit_card'],
+            ['user_id' => 1, 'payment_method' => 'credit_card'],
             [['product_id' => 1, 'quantity' => 3]],
             $this->getTestAddress(),
             null

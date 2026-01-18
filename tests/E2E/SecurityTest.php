@@ -177,32 +177,25 @@ class SecurityTest extends TestCase
     
     public function testOrderAccessControl()
     {
-        // Create order
+        // Create test user and order
         $this->db->exec("
-            INSERT INTO orders (id, order_number, guest_email, status, payment_status, subtotal, tax, shipping_cost, total)
-            VALUES (1, 'ORD-001', 'owner@example.com', 'pending', 'unpaid', 100.00, 19.00, 9.99, 128.99)
+            INSERT INTO users (id, email, password_hash, first_name, last_name, is_active)
+            VALUES (1, 'owner@example.com', 'hash', 'John', 'Doe', 1)
         ");
         
-        // Test access with correct email
-        $_GET = ['guest_email' => 'owner@example.com'];
+        $this->db->exec("
+            INSERT INTO orders (id, order_number, user_id, status, payment_status, subtotal, tax, shipping_cost, total)
+            VALUES (1, 'ORD-001', 1, 'pending', 'unpaid', 100.00, 19.00, 9.99, 128.99)
+        ");
         
-        ob_start();
-        $this->orderController->show('ORD-001');
-        $output = ob_get_clean();
-        
-        $response = json_decode($output, true);
-        $this->assertEquals('success', $response['status']);
-        
-        // Test access with wrong email
-        $_GET = ['guest_email' => 'hacker@example.com'];
-        
+        // Test access without authentication should fail
         ob_start();
         $this->orderController->show('ORD-001');
         $output = ob_get_clean();
         
         $response = json_decode($output, true);
         $this->assertEquals('error', $response['status']);
-        $this->assertEquals(403, $response['code']);
+        $this->assertEquals(401, $response['code']);
     }
     
     /**

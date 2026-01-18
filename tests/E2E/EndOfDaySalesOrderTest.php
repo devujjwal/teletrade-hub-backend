@@ -37,7 +37,7 @@ class EndOfDaySalesOrderTest extends TestCase
         
         // Create paid orders with reservations
         $this->db->exec("
-            INSERT INTO orders (id, order_number, guest_email, status, payment_status, payment_method, subtotal, tax, shipping_cost, total)
+            INSERT INTO orders (id, order_number, user_id, status, payment_status, payment_method, subtotal, tax, shipping_cost, total)
             VALUES 
             (1, 'ORD-001', 'customer1@example.com', 'reserved', 'paid', 'credit_card', 1035.00, 196.65, 0.00, 1231.65),
             (2, 'ORD-002', 'customer2@example.com', 'reserved', 'paid', 'credit_card', 920.00, 174.80, 9.99, 1104.79),
@@ -182,7 +182,7 @@ class EndOfDaySalesOrderTest extends TestCase
         // Create many orders
         for ($i = 4; $i <= 50; $i++) {
             $this->db->exec("
-                INSERT INTO orders (id, order_number, guest_email, status, payment_status, payment_method, subtotal, tax, shipping_cost, total)
+                INSERT INTO orders (id, order_number, user_id, status, payment_status, payment_method, subtotal, tax, shipping_cost, total)
                 VALUES ($i, 'ORD-00$i', 'customer$i@example.com', 'reserved', 'paid', 'credit_card', 1000.00, 190.00, 0.00, 1190.00)
             ");
             

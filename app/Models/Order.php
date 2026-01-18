@@ -206,7 +206,7 @@ class Order
         }
 
         if (!empty($filters['search'])) {
-            $sql .= " AND (o.order_number LIKE :search OR o.guest_email LIKE :search)";
+            $sql .= " AND (o.order_number LIKE :search OR u.email LIKE :search OR CONCAT(u.first_name, ' ', u.last_name) LIKE :search)";
             $params[':search'] = '%' . $filters['search'] . '%';
         }
 
