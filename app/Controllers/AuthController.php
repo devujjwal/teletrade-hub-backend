@@ -456,16 +456,20 @@ public function getAddresses()
             // Support both new (street/street2) and old (address_line1/address_line2) formats
             if (isset($input['street']) || isset($input['address_line1'])) {
                 $street = $input['street'] ?? $input['address_line1'] ?? '';
+                $sanitizedStreet = Sanitizer::string($street);
                 $fields[] = "street = :street";
-                $fields[] = "address_line1 = :street"; // Keep in sync
-                $params[':street'] = Sanitizer::string($street);
+                $fields[] = "address_line1 = :address_line1";
+                $params[':street'] = $sanitizedStreet;
+                $params[':address_line1'] = $sanitizedStreet; // Keep in sync
             }
             
             if (isset($input['street2']) || isset($input['address_line2'])) {
                 $street2 = $input['street2'] ?? $input['address_line2'] ?? '';
+                $sanitizedStreet2 = Sanitizer::string($street2);
                 $fields[] = "street2 = :street2";
-                $fields[] = "address_line2 = :street2"; // Keep in sync
-                $params[':street2'] = Sanitizer::string($street2);
+                $fields[] = "address_line2 = :address_line2";
+                $params[':street2'] = $sanitizedStreet2;
+                $params[':address_line2'] = $sanitizedStreet2; // Keep in sync
             }
 
             $allowedFields = ['label', 'city', 'state', 'postal_code', 'country', 'is_default'];
