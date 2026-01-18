@@ -48,6 +48,17 @@ class OrderController
         }
 
         try {
+            // Debug logging - log what we received
+            error_log("Order creation request received: " . json_encode([
+                'has_billing_address_id' => isset($input['billing_address_id']),
+                'billing_address_id_value' => $input['billing_address_id'] ?? 'NOT_SET',
+                'has_shipping_address_id' => isset($input['shipping_address_id']),
+                'shipping_address_id_value' => $input['shipping_address_id'] ?? 'NOT_SET',
+                'has_billing_address' => isset($input['billing_address']),
+                'has_shipping_address' => isset($input['shipping_address']),
+                'user_id' => $input['user_id'] ?? 'NOT_SET'
+            ]));
+
             // Validate user exists
             $userModel = new User();
             $user = $userModel->getById($input['user_id']);
