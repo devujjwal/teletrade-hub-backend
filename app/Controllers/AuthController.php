@@ -455,7 +455,7 @@ public function getAddresses()
 
             // Support both new (street/street2) and old (address_line1/address_line2) formats
             if (isset($input['street']) || isset($input['address_line1'])) {
-                $street = $input['street'] ?? $input['address_line1'];
+                $street = $input['street'] ?? $input['address_line1'] ?? '';
                 $fields[] = "street = :street";
                 $fields[] = "address_line1 = :street"; // Keep in sync
                 $params[':street'] = Sanitizer::string($street);
@@ -484,11 +484,16 @@ public function getAddresses()
 
             $sql = "UPDATE addresses SET " . implode(', ', $fields) . " WHERE id = :id";
             $stmt = $db->prepare($sql);
-            $stmt->execute($params);
+            
+            if (!$stmt->execute($params)) {
+                $errorInfo = $stmt->errorInfo();
+                throw new Exception('Database error: ' . ($errorInfo[2] ?? 'Unknown error'));
+            }
 
             $updatedAddress = $this->getAddressById($addressId);
             Response::success(['address' => $updatedAddress], 'Address updated successfully');
         } catch (Exception $e) {
+            error_log("Address update error: " . $e->getMessage());
             Response::error('Failed to update address: ' . $e->getMessage(), 500);
         }
     }

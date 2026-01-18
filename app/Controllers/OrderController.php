@@ -33,27 +33,11 @@ class OrderController
         // Validate required fields
         $errors = Validator::validate($input, [
             'cart_items' => 'required',
-            'billing_address' => 'required',
             'payment_method' => 'required'
         ]);
 
         if (!empty($errors)) {
             Response::error('Validation failed', 400, $errors);
-        }
-
-        // Validate billing address
-        $addressErrors = Validator::validate($input['billing_address'], [
-            'first_name' => 'required',
-            'last_name' => 'required',
-            'address_line1' => 'required',
-            'city' => 'required',
-            'postal_code' => 'required',
-            'country' => 'required',
-            'phone' => 'required'
-        ]);
-
-        if (!empty($addressErrors)) {
-            Response::error('Invalid billing address', 400, $addressErrors);
         }
 
         // Validate cart items
@@ -73,24 +57,71 @@ class OrderController
                 }
             }
 
-            // Sanitize addresses
-            $billingAddress = [
-                ':user_id' => $userId,
-                ':first_name' => Sanitizer::string($input['billing_address']['first_name']),
-                ':last_name' => Sanitizer::string($input['billing_address']['last_name']),
-                ':company' => Sanitizer::string($input['billing_address']['company'] ?? ''),
-                ':address_line1' => Sanitizer::string($input['billing_address']['address_line1']),
-                ':address_line2' => Sanitizer::string($input['billing_address']['address_line2'] ?? ''),
-                ':city' => Sanitizer::string($input['billing_address']['city']),
-                ':state' => Sanitizer::string($input['billing_address']['state'] ?? ''),
-                ':postal_code' => Sanitizer::string($input['billing_address']['postal_code']),
-                ':country' => strtoupper(substr($input['billing_address']['country'], 0, 2)),
-                ':phone' => Sanitizer::string($input['billing_address']['phone']),
-                ':is_default' => 0
-            ];
+            $orderModel = new Order();
+            
+            // Handle billing address (either ID or full data)
+            $billingAddressId = null;
+            $billingAddress = null;
+            
+            if (!empty($input['billing_address_id'])) {
+                // Use existing address
+                if (!$userId) {
+                    Response::error('Cannot use saved address for guest checkout', 400);
+                }
+                if (!$orderModel->validateAddressOwnership($input['billing_address_id'], $userId)) {
+                    Response::error('Invalid billing address', 403);
+                }
+                $billingAddressId = $input['billing_address_id'];
+            } else if (!empty($input['billing_address'])) {
+                // Validate full address data
+                $addressErrors = Validator::validate($input['billing_address'], [
+                    'first_name' => 'required',
+                    'last_name' => 'required',
+                    'address_line1' => 'required',
+                    'city' => 'required',
+                    'postal_code' => 'required',
+                    'country' => 'required',
+                    'phone' => 'required'
+                ]);
 
+                if (!empty($addressErrors)) {
+                    Response::error('Invalid billing address', 400, $addressErrors);
+                }
+
+                // Prepare address data for creation
+                $billingAddress = [
+                    ':user_id' => $userId,
+                    ':first_name' => Sanitizer::string($input['billing_address']['first_name']),
+                    ':last_name' => Sanitizer::string($input['billing_address']['last_name']),
+                    ':company' => Sanitizer::string($input['billing_address']['company'] ?? ''),
+                    ':address_line1' => Sanitizer::string($input['billing_address']['address_line1']),
+                    ':address_line2' => Sanitizer::string($input['billing_address']['address_line2'] ?? ''),
+                    ':city' => Sanitizer::string($input['billing_address']['city']),
+                    ':state' => Sanitizer::string($input['billing_address']['state'] ?? ''),
+                    ':postal_code' => Sanitizer::string($input['billing_address']['postal_code']),
+                    ':country' => strtoupper(substr($input['billing_address']['country'], 0, 2)),
+                    ':phone' => Sanitizer::string($input['billing_address']['phone']),
+                    ':is_default' => 0
+                ];
+            } else {
+                Response::error('Billing address is required', 400);
+            }
+
+            // Handle shipping address (either ID or full data)
+            $shippingAddressId = null;
             $shippingAddress = null;
-            if (!empty($input['shipping_address'])) {
+            
+            if (!empty($input['shipping_address_id'])) {
+                // Use existing address
+                if (!$userId) {
+                    Response::error('Cannot use saved address for guest checkout', 400);
+                }
+                if (!$orderModel->validateAddressOwnership($input['shipping_address_id'], $userId)) {
+                    Response::error('Invalid shipping address', 403);
+                }
+                $shippingAddressId = $input['shipping_address_id'];
+            } else if (!empty($input['shipping_address'])) {
+                // Prepare shipping address data for creation
                 $shippingAddress = [
                     ':user_id' => $userId,
                     ':first_name' => Sanitizer::string($input['shipping_address']['first_name']),
@@ -106,6 +137,7 @@ class OrderController
                     ':is_default' => 0
                 ];
             }
+            // If neither shipping_address_id nor shipping_address provided, use billing address
 
             // Create order
             $orderData = [
@@ -118,7 +150,9 @@ class OrderController
             $result = $this->orderService->createOrder(
                 $orderData,
                 $input['cart_items'],
+                $billingAddressId,
                 $billingAddress,
+                $shippingAddressId,
                 $shippingAddress
             );
 

@@ -280,6 +280,22 @@ class Order
     }
 
     /**
+     * Validate address ownership
+     * Returns true if address belongs to user or is a system address (user_id is NULL)
+     */
+    public function validateAddressOwnership($addressId, $userId)
+    {
+        if (!$addressId) {
+            return false;
+        }
+
+        $sql = "SELECT id FROM addresses WHERE id = :id AND (user_id = :user_id OR user_id IS NULL)";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $addressId, ':user_id' => $userId]);
+        return $stmt->fetch() !== false;
+    }
+
+    /**
      * Generate unique order number
      */
     public function generateOrderNumber()

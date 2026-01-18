@@ -31,8 +31,9 @@ class OrderService
 
     /**
      * Create new order from cart
+     * Accepts either address IDs (for existing addresses) or address data (for new addresses)
      */
-    public function createOrder($orderData, $cartItems, $billingAddress, $shippingAddress)
+    public function createOrder($orderData, $cartItems, $billingAddressId, $billingAddress, $shippingAddressId, $shippingAddress)
     {
         // Start transaction
         $this->db->beginTransaction();
@@ -44,13 +45,28 @@ class OrderService
             // Calculate totals
             $totals = $this->calculateTotals($cartItems);
 
-            // Create billing address
-            $billingAddressId = $this->orderModel->createAddress($billingAddress);
+            // Handle billing address - use existing ID or create new
+            if ($billingAddressId) {
+                // Use existing address
+                $finalBillingAddressId = $billingAddressId;
+            } else if ($billingAddress) {
+                // Create new address
+                $finalBillingAddressId = $this->orderModel->createAddress($billingAddress);
+            } else {
+                throw new Exception('Billing address is required');
+            }
 
-            // Create shipping address (or use same as billing)
-            $shippingAddressId = $shippingAddress 
-                ? $this->orderModel->createAddress($shippingAddress)
-                : $billingAddressId;
+            // Handle shipping address - use existing ID, create new, or use billing
+            if ($shippingAddressId) {
+                // Use existing address
+                $finalShippingAddressId = $shippingAddressId;
+            } else if ($shippingAddress) {
+                // Create new address
+                $finalShippingAddressId = $this->orderModel->createAddress($shippingAddress);
+            } else {
+                // Use billing address as shipping
+                $finalShippingAddressId = $finalBillingAddressId;
+            }
 
             // Generate order number
             $orderNumber = $this->orderModel->generateOrderNumber();
@@ -69,8 +85,8 @@ class OrderService
                 ':shipping_cost' => $totals['shipping'],
                 ':total' => $totals['total'],
                 ':currency' => 'EUR',
-                ':billing_address_id' => $billingAddressId,
-                ':shipping_address_id' => $shippingAddressId,
+                ':billing_address_id' => $finalBillingAddressId,
+                ':shipping_address_id' => $finalShippingAddressId,
                 ':notes' => $orderData['notes'] ?? null,
                 ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
                 ':user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null
