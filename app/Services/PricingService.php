@@ -282,6 +282,47 @@ class PricingService
     }
 
     /**
+     * Create or update product-specific markup
+     */
+    public function setProductMarkup($productId, $markupValue, $markupType = 'fixed', $accountType = 'customer')
+    {
+        $sql = "SELECT id FROM pricing_rules
+                WHERE rule_type = 'product' AND entity_id = :product_id AND account_type = :account_type";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':product_id' => $productId,
+            ':account_type' => $accountType
+        ]);
+        $existing = $stmt->fetch();
+
+        if ($existing) {
+            $sql = "UPDATE pricing_rules SET
+                    markup_value = :markup_value,
+                    markup_type = :markup_type
+                    WHERE id = :id";
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([
+                ':id' => $existing['id'],
+                ':markup_value' => $markupValue,
+                ':markup_type' => $markupType
+            ]);
+        }
+
+        $sql = "INSERT INTO pricing_rules (
+                    rule_type, entity_id, markup_type, markup_value, priority, is_active, account_type
+                ) VALUES (
+                    'product', :entity_id, :markup_type, :markup_value, 100, 1, :account_type
+                )";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([
+            ':entity_id' => $productId,
+            ':markup_type' => $markupType,
+            ':markup_value' => $markupValue,
+            ':account_type' => $accountType
+        ]);
+    }
+
+    /**
      * Delete pricing rule
      */
     public function deleteRule($ruleId)

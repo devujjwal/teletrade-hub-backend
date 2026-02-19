@@ -1095,6 +1095,65 @@ class AdminController
     }
 
     /**
+     * Update product-specific pricing for customer and/or merchant
+     * This updates only the selected product via product-level pricing rules.
+     */
+    public function updateProductPricing($productId)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        try {
+            $product = $this->getProductModel()->getById($productId);
+            if (!$product) {
+                Response::notFound('Product not found');
+            }
+
+            $basePrice = floatval($product['base_price'] ?? 0);
+            if ($basePrice <= 0) {
+                Response::error('Product base price must be greater than zero', 400);
+            }
+
+            $updated = [];
+
+            if (isset($input['customer_price'])) {
+                $customerPrice = floatval($input['customer_price']);
+                if ($customerPrice < 0) {
+                    Response::error('Customer price must be zero or greater', 400);
+                }
+                $customerMarkup = $customerPrice - $basePrice;
+                $this->getPricingService()->setProductMarkup($productId, $customerMarkup, 'fixed', 'customer');
+                $updated['customer_price'] = round($customerPrice, 2);
+            }
+
+            if (isset($input['merchant_price'])) {
+                $merchantPrice = floatval($input['merchant_price']);
+                if ($merchantPrice < 0) {
+                    Response::error('Merchant price must be zero or greater', 400);
+                }
+                $merchantMarkup = $merchantPrice - $basePrice;
+                $this->getPricingService()->setProductMarkup($productId, $merchantMarkup, 'fixed', 'merchant');
+                $updated['merchant_price'] = round($merchantPrice, 2);
+            }
+
+            if (empty($updated)) {
+                Response::error('At least one price (customer_price or merchant_price) is required', 400);
+            }
+
+            Response::success([
+                'product_id' => (int)$productId,
+                'updated' => $updated
+            ], 'Product-specific pricing updated');
+        } catch (Exception $e) {
+            Response::error('Failed to update product pricing: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Sync products from vendor
      * Supports multi-language sync
      */

@@ -220,6 +220,7 @@ $router->put('admin/products/{id}', 'AdminController', 'updateProduct');
 $router->get('admin/pricing', 'AdminController', 'getPricing');
 $router->put('admin/pricing/global', 'AdminController', 'updateGlobalMarkup');
 $router->put('admin/pricing/category/{id}', 'AdminController', 'updateCategoryMarkup');
+$router->put('admin/pricing/product/{id}', 'AdminController', 'updateProductPricing');
 
 // Admin Sync
 $router->post('admin/sync/products', 'AdminController', 'syncProducts');
