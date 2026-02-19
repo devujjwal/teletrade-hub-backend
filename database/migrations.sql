@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS `product_images` (
 CREATE TABLE IF NOT EXISTS `pricing_rules` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `rule_type` ENUM('global', 'category', 'brand', 'product') NOT NULL,
+  `account_type` ENUM('customer', 'merchant') NOT NULL DEFAULT 'customer',
   `entity_id` INT UNSIGNED NULL COMMENT 'Category, Brand, or Product ID',
   `markup_type` ENUM('percentage', 'fixed') DEFAULT 'percentage',
   `markup_value` DECIMAL(10, 2) NOT NULL,
@@ -175,14 +176,24 @@ CREATE TABLE IF NOT EXISTS `pricing_rules` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `rule_type` (`rule_type`, `entity_id`),
+  KEY `rule_type` (`rule_type`, `entity_id`, `account_type`),
   KEY `is_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert default global markup
-INSERT INTO `pricing_rules` (`rule_type`, `markup_type`, `markup_value`, `priority`, `is_active`) 
-VALUES ('global', 'percentage', 15.00, 0, 1)
-ON DUPLICATE KEY UPDATE `rule_type` = `rule_type`;
+-- Insert default global markups (customer + merchant) only if missing
+INSERT INTO `pricing_rules` (`rule_type`, `account_type`, `entity_id`, `markup_type`, `markup_value`, `priority`, `is_active`)
+SELECT 'global', 'customer', NULL, 'percentage', 15.00, 0, 1
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM `pricing_rules` WHERE `rule_type` = 'global' AND `account_type` = 'customer'
+);
+
+INSERT INTO `pricing_rules` (`rule_type`, `account_type`, `entity_id`, `markup_type`, `markup_value`, `priority`, `is_active`)
+SELECT 'global', 'merchant', NULL, 'percentage', 15.00, 0, 1
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM `pricing_rules` WHERE `rule_type` = 'global' AND `account_type` = 'merchant'
+);
 
 -- =====================================================
 -- USER & AUTH TABLES

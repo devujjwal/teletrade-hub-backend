@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
+require_once __DIR__ . '/../Services/PricingService.php';
 require_once __DIR__ . '/../Middlewares/LanguageMiddleware.php';
 if (!class_exists('Env')) {
     require_once __DIR__ . '/../Config/env.php';
@@ -17,12 +18,14 @@ class ProductController
     private $productModel;
     private $categoryModel;
     private $brandModel;
+    private $pricingService;
 
     public function __construct()
     {
         $this->productModel = new Product();
         $this->categoryModel = new Category();
         $this->brandModel = new Brand();
+        $this->pricingService = new PricingService();
         
         // Initialize language middleware
         LanguageMiddleware::handle();
@@ -98,6 +101,8 @@ class ProductController
 
         // Get products
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
+        $viewer = $this->resolveViewerContext();
+        $products = $this->applyViewerPricing($products, $viewer);
         $total = $this->productModel->count($filters);
 
         // Get filter options
@@ -128,6 +133,9 @@ class ProductController
             Response::notFound('Product not found');
         }
 
+        $viewer = $this->resolveViewerContext();
+        $product = $this->applyViewerPricing([$product], $viewer)[0];
+
         Response::success([
             'product' => $product,
             'language' => LanguageMiddleware::getLanguageInfo()
@@ -155,6 +163,8 @@ class ProductController
                 $filters['is_available'] = 1;
             }
             $products = $this->productModel->getAll($filters, $page, $limit, $lang);
+            $viewer = $this->resolveViewerContext();
+            $products = $this->applyViewerPricing($products, $viewer);
             $total = $this->productModel->count($filters);
 
             // Return empty results instead of error when no products found
@@ -204,6 +214,91 @@ class ProductController
     }
 
     /**
+     * Resolve viewer context from bearer token
+     */
+    private function resolveViewerContext()
+    {
+        $context = [
+            'is_authenticated' => false,
+            'account_type' => 'customer',
+            'show_base_price' => false,
+        ];
+
+        $headers = function_exists('getallheaders') ? getallheaders() : [];
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        if (empty($authHeader) || !preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            return $context;
+        }
+
+        $token = $matches[1];
+        $db = Database::getConnection();
+
+        // Customer token
+        $sql = "SELECT u.account_type
+                FROM user_sessions us
+                JOIN users u ON us.user_id = u.id
+                WHERE us.token = :token
+                AND us.expires_at > NOW()
+                AND u.is_active = 1
+                LIMIT 1";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':token' => $token]);
+        $user = $stmt->fetch();
+        if ($user) {
+            $context['is_authenticated'] = true;
+            $context['account_type'] = $user['account_type'] === 'merchant' ? 'merchant' : 'customer';
+            return $context;
+        }
+
+        // Admin token (super admin sees base price)
+        $sql = "SELECT au.role
+                FROM admin_sessions asess
+                JOIN admin_users au ON asess.admin_user_id = au.id
+                WHERE asess.token = :token
+                AND asess.expires_at > NOW()
+                AND au.is_active = 1
+                LIMIT 1";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':token' => $token]);
+        $admin = $stmt->fetch();
+        if ($admin) {
+            $context['is_authenticated'] = true;
+            $context['account_type'] = 'customer';
+            $context['show_base_price'] = ($admin['role'] ?? '') === 'super_admin';
+        }
+
+        return $context;
+    }
+
+    /**
+     * Apply pricing for current viewer:
+     * - customer markup for customers
+     * - merchant markup for merchants
+     * - base price for super_admin
+     */
+    private function applyViewerPricing(array $products, array $viewer)
+    {
+        foreach ($products as &$product) {
+            $basePrice = floatval($product['base_price'] ?? 0);
+            if (!empty($viewer['show_base_price'])) {
+                $product['price'] = round($basePrice, 2);
+                continue;
+            }
+
+            $product['price'] = $this->pricingService->calculatePrice(
+                $basePrice,
+                $product['category_id'] ?? null,
+                $product['brand_id'] ?? null,
+                $product['id'] ?? null,
+                $viewer['account_type'] ?? 'customer'
+            );
+        }
+        unset($product);
+
+        return $products;
+    }
+
+    /**
      * Get all categories
      */
     public function categories()
@@ -233,6 +328,8 @@ class ProductController
 
         $filters = ['category_id' => $category['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
+        $viewer = $this->resolveViewerContext();
+        $products = $this->applyViewerPricing($products, $viewer);
         $total = $this->productModel->count($filters);
 
         Response::success([
@@ -277,6 +374,8 @@ class ProductController
 
         $filters = ['brand_id' => $brand['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
+        $viewer = $this->resolveViewerContext();
+        $products = $this->applyViewerPricing($products, $viewer);
         $total = $this->productModel->count($filters);
 
         Response::success([
@@ -305,4 +404,3 @@ class ProductController
         ]);
     }
 }
-

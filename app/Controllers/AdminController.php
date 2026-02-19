@@ -847,7 +847,7 @@ class AdminController
 
         try {
             $rules = $this->getPricingService()->getAllRules();
-            $globalMarkup = $this->getPricingService()->getGlobalMarkup();
+            $globalMarkup = $this->getPricingService()->getGlobalMarkups();
 
             Response::success([
                 'global_markup' => $globalMarkup,
@@ -873,17 +873,26 @@ class AdminController
 
         try {
             $markupValue = floatval($input['markup_value']);
-            $this->getPricingService()->updateGlobalMarkup($markupValue);
+            $accountType = $input['account_type'] ?? 'customer';
+            if (!in_array($accountType, ['customer', 'merchant'], true)) {
+                Response::error('Invalid account type', 400);
+            }
+
+            $this->getPricingService()->updateGlobalMarkup($markupValue, $accountType);
             
             // Optionally recalculate all prices
             if (!empty($input['recalculate'])) {
                 $updated = $this->getPricingService()->recalculateAllPrices();
                 Response::success([
+                    'account_type' => $accountType,
                     'markup_value' => $markupValue,
                     'products_updated' => $updated
                 ], 'Global markup updated and prices recalculated');
             } else {
-                Response::success(['markup_value' => $markupValue], 'Global markup updated');
+                Response::success([
+                    'account_type' => $accountType,
+                    'markup_value' => $markupValue
+                ], 'Global markup updated');
             }
         } catch (Exception $e) {
             Response::error('Failed to update markup: ' . $e->getMessage(), 500);
@@ -906,11 +915,16 @@ class AdminController
         try {
             $markupValue = floatval($input['markup_value']);
             $markupType = $input['markup_type'] ?? 'percentage';
+            $accountType = $input['account_type'] ?? 'customer';
+            if (!in_array($accountType, ['customer', 'merchant'], true)) {
+                Response::error('Invalid account type', 400);
+            }
             
-            $this->getPricingService()->setCategoryMarkup($categoryId, $markupValue, $markupType);
+            $this->getPricingService()->setCategoryMarkup($categoryId, $markupValue, $markupType, $accountType);
             
             Response::success([
                 'category_id' => $categoryId,
+                'account_type' => $accountType,
                 'markup_value' => $markupValue,
                 'markup_type' => $markupType
             ], 'Category markup updated');
@@ -1431,4 +1445,3 @@ class AdminController
         }
     }
 }
-
