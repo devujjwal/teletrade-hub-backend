@@ -77,6 +77,13 @@ class PricingService
 
         $sql .= " ORDER BY 
                  CASE WHEN account_type = :account_type THEN 0 ELSE 1 END,
+                 CASE 
+                    WHEN rule_type = 'product' THEN 4
+                    WHEN rule_type = 'category' THEN 3
+                    WHEN rule_type = 'brand' THEN 2
+                    WHEN rule_type = 'global' THEN 1
+                    ELSE 0
+                 END DESC,
                  priority DESC, id DESC LIMIT 1";
 
         $stmt = $this->db->prepare($sql);

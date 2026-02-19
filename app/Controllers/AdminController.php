@@ -716,6 +716,29 @@ class AdminController
         }
 
         $products = $this->getProductModel()->getAll($filters, $page, $limit, $lang);
+        foreach ($products as &$product) {
+            $basePrice = isset($product['base_price']) ? floatval($product['base_price']) : 0.0;
+            if ($basePrice > 0) {
+                $product['customer_price'] = $this->getPricingService()->calculatePrice(
+                    $basePrice,
+                    $product['category_id'] ?? null,
+                    $product['brand_id'] ?? null,
+                    $product['id'] ?? null,
+                    'customer'
+                );
+                $product['merchant_price'] = $this->getPricingService()->calculatePrice(
+                    $basePrice,
+                    $product['category_id'] ?? null,
+                    $product['brand_id'] ?? null,
+                    $product['id'] ?? null,
+                    'merchant'
+                );
+            } else {
+                $product['customer_price'] = floatval($product['price'] ?? 0);
+                $product['merchant_price'] = floatval($product['price'] ?? 0);
+            }
+        }
+        unset($product);
         $total = $this->getProductModel()->count($filters);
 
         Response::success([
@@ -741,6 +764,27 @@ class AdminController
             
             if (!$product) {
                 Response::notFound('Product not found');
+            }
+
+            $basePrice = isset($product['base_price']) ? floatval($product['base_price']) : 0.0;
+            if ($basePrice > 0) {
+                $product['customer_price'] = $this->getPricingService()->calculatePrice(
+                    $basePrice,
+                    $product['category_id'] ?? null,
+                    $product['brand_id'] ?? null,
+                    $product['id'] ?? null,
+                    'customer'
+                );
+                $product['merchant_price'] = $this->getPricingService()->calculatePrice(
+                    $basePrice,
+                    $product['category_id'] ?? null,
+                    $product['brand_id'] ?? null,
+                    $product['id'] ?? null,
+                    'merchant'
+                );
+            } else {
+                $product['customer_price'] = floatval($product['price'] ?? 0);
+                $product['merchant_price'] = floatval($product['price'] ?? 0);
             }
             
             Response::success(['product' => $product]);
