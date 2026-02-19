@@ -49,9 +49,12 @@ class PricingService
         // Priority: product > category > brand > global
         $sql = "SELECT * FROM pricing_rules 
                 WHERE is_active = 1
-                AND (account_type = :account_type OR account_type IS NULL)";
+                AND (account_type = :account_type_filter OR account_type IS NULL)";
         $conditions = [];
-        $params = [':account_type' => $accountType];
+        $params = [
+            ':account_type_filter' => $accountType,
+            ':account_type_order' => $accountType
+        ];
 
         // Build conditions based on available IDs
         if ($productId !== null) {
@@ -76,7 +79,7 @@ class PricingService
         }
 
         $sql .= " ORDER BY 
-                 CASE WHEN account_type = :account_type THEN 0 ELSE 1 END,
+                 CASE WHEN account_type = :account_type_order THEN 0 ELSE 1 END,
                  CASE 
                     WHEN rule_type = 'product' THEN 4
                     WHEN rule_type = 'category' THEN 3
