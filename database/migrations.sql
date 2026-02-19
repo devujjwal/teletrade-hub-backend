@@ -191,17 +191,39 @@ ON DUPLICATE KEY UPDATE `rule_type` = `rule_type`;
 -- Users (Customers)
 CREATE TABLE IF NOT EXISTS `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `account_type` ENUM('customer', 'merchant') NOT NULL DEFAULT 'customer',
   `email` VARCHAR(255) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
   `first_name` VARCHAR(100) NOT NULL,
   `last_name` VARCHAR(100) NOT NULL,
+  `address` VARCHAR(255) NULL,
+  `postal_code` VARCHAR(20) NULL,
+  `city` VARCHAR(100) NULL,
+  `country` VARCHAR(100) NULL,
   `phone` VARCHAR(50) NULL,
+  `mobile` VARCHAR(50) NULL,
+  `tax_number` VARCHAR(100) NULL,
+  `vat_number` VARCHAR(100) NULL,
+  `delivery_address` VARCHAR(255) NULL,
+  `delivery_postal_code` VARCHAR(20) NULL,
+  `delivery_city` VARCHAR(100) NULL,
+  `delivery_country` VARCHAR(100) NULL,
+  `account_holder` VARCHAR(200) NULL,
+  `bank_name` VARCHAR(200) NULL,
+  `iban` VARCHAR(50) NULL,
+  `bic` VARCHAR(30) NULL,
+  `id_card_file` VARCHAR(500) NULL,
+  `passport_file` VARCHAR(500) NULL,
+  `business_registration_certificate_file` VARCHAR(500) NULL,
+  `vat_certificate_file` VARCHAR(500) NULL,
+  `tax_number_certificate_file` VARCHAR(500) NULL,
   `is_active` TINYINT(1) DEFAULT 1,
   `email_verified_at` TIMESTAMP NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`),
+  KEY `account_type` (`account_type`),
   KEY `is_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -596,4 +618,3 @@ INSERT INTO `languages` (`id`, `code`, `name`, `is_active`, `sort_order`) VALUES
 (10, 'sk', 'Slovakian', 1, 10),
 (11, 'pl', 'Polish', 1, 11)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
-

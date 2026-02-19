@@ -23,7 +23,11 @@ class AuthController
      */
     public function register()
     {
-        $input = json_decode(file_get_contents('php://input'), true);
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        $isMultipart = stripos($contentType, 'multipart/form-data') !== false;
+        $input = $isMultipart
+            ? $_POST
+            : json_decode(file_get_contents('php://input'), true);
 
         if (!$input) {
             Response::error('Invalid request data', 400);
@@ -33,13 +37,63 @@ class AuthController
         $clientIp = RateLimitMiddleware::getClientIdentifier();
         $this->rateLimiter->enforce($clientIp, 'customer_register', 3, 3600); // 3 attempts per hour
 
-        // Validate input with strong password requirement
+        $accountType = $input['account_type'] ?? 'customer';
+
+        // Validate common fields
         $errors = Validator::validate($input, [
+            'account_type' => 'required|in:customer,merchant',
             'email' => 'required|email',
             'password' => 'required|min:8|strong_password',
-            'first_name' => 'required',
-            'last_name' => 'required'
+            'first_name' => 'required|max:100',
+            'last_name' => 'required|max:100',
+            'address' => 'required|max:255',
+            'postal_code' => 'required|max:20',
+            'city' => 'required|max:100',
+            'country' => 'required|max:100',
+            'phone' => 'required|max:50',
+            'mobile' => 'required|max:50'
         ]);
+
+        // Validate merchant-specific fields
+        if ($accountType === 'merchant') {
+            $merchantErrors = Validator::validate($input, [
+                'tax_number' => 'required|max:100',
+                'vat_number' => 'required|max:100',
+                'delivery_address' => 'required|max:255',
+                'delivery_postal_code' => 'required|max:20',
+                'delivery_city' => 'required|max:100',
+                'delivery_country' => 'required|max:100',
+                'account_holder' => 'required|max:200',
+                'bank_name' => 'required|max:200',
+                'iban' => 'required|max:50',
+                'bic' => 'required|max:30'
+            ]);
+            $errors = array_merge_recursive($errors, $merchantErrors);
+        }
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        $documents = [];
+        $requiredDocuments = $accountType === 'merchant'
+            ? ['id_card_file', 'passport_file', 'business_registration_certificate_file', 'vat_certificate_file', 'tax_number_certificate_file']
+            : ['id_card_file', 'passport_file'];
+
+        foreach ($requiredDocuments as $field) {
+            if (!$isMultipart || !isset($_FILES[$field]) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                $errors[$field][] = "The $field file is required.";
+                continue;
+            }
+
+            $savedPath = $this->saveRegistrationDocument($_FILES[$field], $accountType, $field);
+            if (!$savedPath) {
+                $errors[$field][] = "The $field file must be PDF, JPG, or PNG and up to 10MB.";
+                continue;
+            }
+
+            $documents[$field] = $savedPath;
+        }
 
         if (!empty($errors)) {
             Response::error('Validation failed', 400, $errors);
@@ -57,11 +111,32 @@ class AuthController
 
             // Create user
             $userId = $this->userModel->create([
+                ':account_type' => $accountType,
                 ':email' => Sanitizer::email($input['email']),
                 ':password_hash' => $passwordHash,
                 ':first_name' => Sanitizer::string($input['first_name']),
                 ':last_name' => Sanitizer::string($input['last_name']),
-                ':phone' => Sanitizer::string($input['phone'] ?? ''),
+                ':address' => Sanitizer::string($input['address']),
+                ':postal_code' => Sanitizer::string($input['postal_code']),
+                ':city' => Sanitizer::string($input['city']),
+                ':country' => Sanitizer::string($input['country']),
+                ':phone' => Sanitizer::string($input['phone']),
+                ':mobile' => Sanitizer::string($input['mobile']),
+                ':tax_number' => Sanitizer::string($input['tax_number'] ?? ''),
+                ':vat_number' => Sanitizer::string($input['vat_number'] ?? ''),
+                ':delivery_address' => Sanitizer::string($input['delivery_address'] ?? ''),
+                ':delivery_postal_code' => Sanitizer::string($input['delivery_postal_code'] ?? ''),
+                ':delivery_city' => Sanitizer::string($input['delivery_city'] ?? ''),
+                ':delivery_country' => Sanitizer::string($input['delivery_country'] ?? ''),
+                ':account_holder' => Sanitizer::string($input['account_holder'] ?? ''),
+                ':bank_name' => Sanitizer::string($input['bank_name'] ?? ''),
+                ':iban' => Sanitizer::string($input['iban'] ?? ''),
+                ':bic' => Sanitizer::string($input['bic'] ?? ''),
+                ':id_card_file' => $documents['id_card_file'] ?? null,
+                ':passport_file' => $documents['passport_file'] ?? null,
+                ':business_registration_certificate_file' => $documents['business_registration_certificate_file'] ?? null,
+                ':vat_certificate_file' => $documents['vat_certificate_file'] ?? null,
+                ':tax_number_certificate_file' => $documents['tax_number_certificate_file'] ?? null,
                 ':is_active' => 1
             ]);
 
@@ -77,6 +152,59 @@ class AuthController
         } catch (Exception $e) {
             Response::error('Registration failed: ' . $e->getMessage(), 500);
         }
+    }
+
+    /**
+     * Save registration document file and return public path
+     */
+    private function saveRegistrationDocument($file, $accountType, $fieldName)
+    {
+        if (!isset($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
+            return null;
+        }
+
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            return null;
+        }
+
+        $maxSize = 10 * 1024 * 1024; // 10MB
+        if (($file['size'] ?? 0) <= 0 || $file['size'] > $maxSize) {
+            return null;
+        }
+
+        $allowedMimeToExt = [
+            'application/pdf' => 'pdf',
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png'
+        ];
+
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->file($file['tmp_name']);
+        if (!isset($allowedMimeToExt[$mimeType])) {
+            return null;
+        }
+
+        $extension = $allowedMimeToExt[$mimeType];
+        $safeField = preg_replace('/[^a-zA-Z0-9_]/', '', $fieldName);
+        try {
+            $randomPart = bin2hex(random_bytes(8));
+        } catch (Exception $e) {
+            return null;
+        }
+        $filename = $safeField . '_' . date('YmdHis') . '_' . $randomPart . '.' . $extension;
+
+        $relativeDir = '/uploads/registration/' . $accountType;
+        $uploadDir = __DIR__ . '/../../public' . $relativeDir;
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+            return null;
+        }
+
+        $destination = $uploadDir . '/' . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $destination)) {
+            return null;
+        }
+
+        return $relativeDir . '/' . $filename;
     }
 
     /**
@@ -587,4 +715,3 @@ public function getAddresses()
         }
     }
 }
-

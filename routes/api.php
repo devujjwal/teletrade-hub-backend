@@ -176,6 +176,11 @@ $router->get('orders/{orderId}', 'OrderController', 'show');
 $router->post('orders/{orderId}/payment-success', 'OrderController', 'paymentSuccess');
 $router->post('orders/{orderId}/payment-failed', 'OrderController', 'paymentFailed');
 
+// Shipping (Customer)
+$router->get('shipping/track/{trackingNumber}', 'ShippingController', 'track');
+$router->get('shipping/orders/{orderId}/tracking', 'ShippingController', 'getOrderTracking');
+$router->post('shipping/calculate', 'ShippingController', 'calculate');
+
 // Auth (Customer)
 $router->post('auth/register', 'AuthController', 'register');
 $router->post('auth/login', 'AuthController', 'login');
@@ -234,6 +239,9 @@ $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSales
 // Admin Settings
 $router->get('admin/settings', 'AdminController', 'getSettings');
 $router->put('admin/settings', 'AdminController', 'updateSettings');
+
+// Admin Shipping
+$router->post('admin/shipping/orders/{orderId}/tracking', 'ShippingController', 'updateOrderTracking');
 
 // Admin Password Management
 $router->put('admin/change-password', 'AdminController', 'changePassword');

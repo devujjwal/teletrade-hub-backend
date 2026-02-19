@@ -17,8 +17,63 @@ class User
      */
     public function create($data)
     {
-        $sql = "INSERT INTO users (email, password_hash, first_name, last_name, phone, is_active)
-                VALUES (:email, :password_hash, :first_name, :last_name, :phone, :is_active)";
+        $sql = "INSERT INTO users (
+                    account_type,
+                    email,
+                    password_hash,
+                    first_name,
+                    last_name,
+                    address,
+                    postal_code,
+                    city,
+                    country,
+                    phone,
+                    mobile,
+                    tax_number,
+                    vat_number,
+                    delivery_address,
+                    delivery_postal_code,
+                    delivery_city,
+                    delivery_country,
+                    account_holder,
+                    bank_name,
+                    iban,
+                    bic,
+                    id_card_file,
+                    passport_file,
+                    business_registration_certificate_file,
+                    vat_certificate_file,
+                    tax_number_certificate_file,
+                    is_active
+                ) VALUES (
+                    :account_type,
+                    :email,
+                    :password_hash,
+                    :first_name,
+                    :last_name,
+                    :address,
+                    :postal_code,
+                    :city,
+                    :country,
+                    :phone,
+                    :mobile,
+                    :tax_number,
+                    :vat_number,
+                    :delivery_address,
+                    :delivery_postal_code,
+                    :delivery_city,
+                    :delivery_country,
+                    :account_holder,
+                    :bank_name,
+                    :iban,
+                    :bic,
+                    :id_card_file,
+                    :passport_file,
+                    :business_registration_certificate_file,
+                    :vat_certificate_file,
+                    :tax_number_certificate_file,
+                    :is_active
+                )";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($data);
@@ -110,4 +165,3 @@ class User
         return $stmt->fetchAll();
     }
 }
-
