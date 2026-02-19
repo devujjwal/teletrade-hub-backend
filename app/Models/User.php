@@ -142,6 +142,17 @@ class User
     }
 
     /**
+     * Check if phone exists in phone or mobile fields
+     */
+    public function phoneExists($phone)
+    {
+        $sql = "SELECT COUNT(*) FROM users WHERE phone = :phone OR mobile = :phone";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':phone' => $phone]);
+        return $stmt->fetchColumn() > 0;
+    }
+
+    /**
      * Get user addresses
      */
     public function getAddresses($userId)

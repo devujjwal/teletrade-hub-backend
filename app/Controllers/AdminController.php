@@ -436,6 +436,9 @@ class AdminController
         if (!empty($_GET['search'])) {
             $filters['search'] = Sanitizer::string($_GET['search']);
         }
+        if (!empty($_GET['customer_type'])) {
+            $filters['customer_type'] = Sanitizer::string($_GET['customer_type']);
+        }
 
         $orders = $this->getOrderModel()->getAll($filters, $page, $limit);
         $total = $this->getOrderModel()->count($filters);
@@ -449,6 +452,120 @@ class AdminController
                 'pages' => ceil($total / $limit)
             ]
         ]);
+    }
+
+    /**
+     * Get shop users (customer + merchant)
+     */
+    public function users()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+
+        $filters = [];
+        $params = [];
+        $where = ["1=1"];
+
+        if (!empty($_GET['account_type'])) {
+            $filters['account_type'] = Sanitizer::string($_GET['account_type']);
+            $where[] = "u.account_type = :account_type";
+            $params[':account_type'] = $filters['account_type'];
+        }
+
+        if (isset($_GET['approval_status']) && $_GET['approval_status'] !== '') {
+            $approvalStatus = Sanitizer::string($_GET['approval_status']);
+            if ($approvalStatus === 'approved') {
+                $where[] = "u.is_active = 1";
+            } elseif ($approvalStatus === 'pending') {
+                $where[] = "u.is_active = 0";
+            }
+        }
+
+        if (!empty($_GET['search'])) {
+            $where[] = "(u.first_name LIKE :search OR u.last_name LIKE :search OR u.email LIKE :search OR u.phone LIKE :search OR u.mobile LIKE :search)";
+            $params[':search'] = '%' . Sanitizer::string($_GET['search']) . '%';
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        $sql = "SELECT u.*,
+                CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as full_name
+                FROM users u
+                WHERE $whereSql
+                ORDER BY u.created_at DESC
+                LIMIT :limit OFFSET :offset";
+
+        $stmt = $this->db->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $users = $stmt->fetchAll();
+
+        $countSql = "SELECT COUNT(*) FROM users u WHERE $whereSql";
+        $countStmt = $this->db->prepare($countSql);
+        foreach ($params as $key => $value) {
+            $countStmt->bindValue($key, $value);
+        }
+        $countStmt->execute();
+        $total = (int)$countStmt->fetchColumn();
+
+        // Remove sensitive fields
+        foreach ($users as &$user) {
+            unset($user['password_hash']);
+        }
+        unset($user);
+
+        Response::success([
+            'users' => $users,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => (int)ceil($total / $limit)
+            ]
+        ]);
+    }
+
+    /**
+     * Approve or unapprove shop user
+     */
+    public function updateUserApproval($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($input['is_active'])) {
+            Response::error('is_active is required', 400);
+        }
+
+        $isActive = !empty($input['is_active']) ? 1 : 0;
+        $sql = "UPDATE users SET is_active = :is_active WHERE id = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':is_active' => $isActive,
+            ':id' => (int)$id
+        ]);
+
+        $userSql = "SELECT * FROM users WHERE id = :id";
+        $userStmt = $this->db->prepare($userSql);
+        $userStmt->execute([':id' => (int)$id]);
+        $user = $userStmt->fetch();
+
+        if (!$user) {
+            Response::notFound('User not found');
+        }
+
+        unset($user['password_hash']);
+
+        Response::success([
+            'user' => $user
+        ], $isActive ? 'User approved successfully' : 'User marked as pending');
     }
 
     /**

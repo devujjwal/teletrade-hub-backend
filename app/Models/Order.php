@@ -185,7 +185,8 @@ class Order
         
         $sql = "SELECT o.*, 
                 CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as customer_name,
-                u.email as customer_email
+                u.email as customer_email,
+                u.account_type as customer_type
                 FROM orders o
                 LEFT JOIN users u ON o.user_id = u.id
                 WHERE 1=1";
@@ -203,6 +204,11 @@ class Order
         if (!empty($filters['user_id'])) {
             $sql .= " AND o.user_id = :user_id";
             $params[':user_id'] = $filters['user_id'];
+        }
+
+        if (!empty($filters['customer_type'])) {
+            $sql .= " AND u.account_type = :customer_type";
+            $params[':customer_type'] = $filters['customer_type'];
         }
 
         if (!empty($filters['search'])) {
@@ -229,16 +235,34 @@ class Order
     public function count($filters = [])
     {
         $params = [];
-        $sql = "SELECT COUNT(*) FROM orders WHERE 1=1";
+        $sql = "SELECT COUNT(*) 
+                FROM orders o
+                LEFT JOIN users u ON o.user_id = u.id
+                WHERE 1=1";
 
         if (!empty($filters['status'])) {
-            $sql .= " AND status = :status";
+            $sql .= " AND o.status = :status";
             $params[':status'] = $filters['status'];
         }
 
+        if (!empty($filters['payment_status'])) {
+            $sql .= " AND o.payment_status = :payment_status";
+            $params[':payment_status'] = $filters['payment_status'];
+        }
+
         if (!empty($filters['user_id'])) {
-            $sql .= " AND user_id = :user_id";
+            $sql .= " AND o.user_id = :user_id";
             $params[':user_id'] = $filters['user_id'];
+        }
+
+        if (!empty($filters['customer_type'])) {
+            $sql .= " AND u.account_type = :customer_type";
+            $params[':customer_type'] = $filters['customer_type'];
+        }
+
+        if (!empty($filters['search'])) {
+            $sql .= " AND (o.order_number LIKE :search OR u.email LIKE :search OR CONCAT(u.first_name, ' ', u.last_name) LIKE :search)";
+            $params[':search'] = '%' . $filters['search'] . '%';
         }
 
         $stmt = $this->db->prepare($sql);
@@ -345,4 +369,3 @@ class Order
         return $stmt->fetch();
     }
 }
-

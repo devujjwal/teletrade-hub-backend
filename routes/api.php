@@ -206,6 +206,10 @@ $router->get('admin/orders', 'AdminController', 'orders');
 $router->get('admin/orders/{id}', 'AdminController', 'orderDetail');
 $router->put('admin/orders/{id}/status', 'AdminController', 'updateOrderStatus');
 
+// Admin Users
+$router->get('admin/users', 'AdminController', 'users');
+$router->put('admin/users/{id}/approval', 'AdminController', 'updateUserApproval');
+
 // Admin Products
 $router->get('admin/products', 'AdminController', 'products');
 $router->get('admin/products/{id}', 'AdminController', 'getProduct');
@@ -252,4 +256,3 @@ $router->get('admin/debug/database', 'AdminController', 'debugDatabase');
 $router->get('admin/debug/vendor-api', 'AdminController', 'debugVendorApi');
 
 return $router;
-

@@ -75,6 +75,16 @@ class AuthController
             Response::error('Validation failed', 400, $errors);
         }
 
+        // Check if email already exists
+        if ($this->userModel->emailExists($input['email'])) {
+            Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
+        }
+
+        // Check if phone already exists
+        if ($this->userModel->phoneExists($input['phone'])) {
+            Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
+        }
+
         $documents = [];
         $requiredDocuments = $accountType === 'merchant'
             ? ['id_card_file', 'passport_file', 'business_registration_certificate_file', 'vat_certificate_file', 'tax_number_certificate_file']
@@ -97,12 +107,6 @@ class AuthController
 
         if (!empty($errors)) {
             Response::error('Validation failed', 400, $errors);
-        }
-
-        // Check if email already exists
-        if ($this->userModel->emailExists($input['email'])) {
-            // SECURITY: Generic error to prevent email enumeration
-            Response::error('Registration failed. Please try again.', 400);
         }
 
         try {
@@ -137,7 +141,7 @@ class AuthController
                 ':business_registration_certificate_file' => $documents['business_registration_certificate_file'] ?? null,
                 ':vat_certificate_file' => $documents['vat_certificate_file'] ?? null,
                 ':tax_number_certificate_file' => $documents['tax_number_certificate_file'] ?? null,
-                ':is_active' => 1
+                ':is_active' => 0
             ]);
 
             $user = $this->userModel->getById($userId);
@@ -147,8 +151,8 @@ class AuthController
 
             Response::success([
                 'user' => $user,
-                'message' => 'Registration successful'
-            ], 'Registration successful', 201);
+                'message' => 'Registration submitted. You can login after admin approval.'
+            ], 'Registration submitted. Awaiting admin approval.', 201);
         } catch (Exception $e) {
             Response::error('Registration failed: ' . $e->getMessage(), 500);
         }
@@ -241,7 +245,7 @@ class AuthController
             }
 
             if (!$user['is_active']) {
-                Response::error('Account is disabled', 403);
+                Response::error('Your account is not approved yet. You can login once our team approves your account.', 403);
             }
 
             // SECURITY: Clear rate limit on successful login
