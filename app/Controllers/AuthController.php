@@ -33,6 +33,11 @@ class AuthController
             Response::error('Invalid request data', 400);
         }
 
+        // Normalize common inputs before validation and duplicate checks.
+        $input['email'] = trim((string)($input['email'] ?? ''));
+        $input['phone'] = trim((string)($input['phone'] ?? ''));
+        $input['mobile'] = trim((string)($input['mobile'] ?? ''));
+
         // SECURITY: Rate limiting to prevent registration spam
         $clientIp = RateLimitMiddleware::getClientIdentifier();
         $this->rateLimiter->enforce($clientIp, 'customer_register', 3, 3600); // 3 attempts per hour
@@ -153,8 +158,26 @@ class AuthController
                 'user' => $user,
                 'message' => 'Registration submitted. You can login after admin approval.'
             ], 'Registration submitted. Awaiting admin approval.', 201);
+        } catch (PDOException $e) {
+            error_log('Registration DB Error: ' . $e->getMessage());
+
+            $sqlState = $e->errorInfo[0] ?? (string)$e->getCode();
+            $dbError = strtolower($e->errorInfo[2] ?? $e->getMessage());
+
+            // Handle duplicate keys gracefully instead of surfacing as a generic 500.
+            if ($sqlState === '23000') {
+                if (strpos($dbError, 'email') !== false) {
+                    Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
+                }
+                if (strpos($dbError, 'phone') !== false || strpos($dbError, 'mobile') !== false) {
+                    Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
+                }
+            }
+
+            Response::error('Registration failed due to a database error.', 500);
         } catch (Exception $e) {
-            Response::error('Registration failed: ' . $e->getMessage(), 500);
+            error_log('Registration Error: ' . $e->getMessage());
+            Response::error('Registration failed. Please try again later.', 500);
         }
     }
 
