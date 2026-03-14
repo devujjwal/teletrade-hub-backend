@@ -521,7 +521,7 @@ class OrderService
      */
     private function getSetting($key, $default = null)
     {
-        $sql = "SELECT value FROM settings WHERE `key` = :key";
+        $sql = "SELECT value FROM settings WHERE key = :key";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':key' => $key]);
         $result = $stmt->fetch();
@@ -577,4 +577,3 @@ class OrderService
         return $order;
     }
 }
-

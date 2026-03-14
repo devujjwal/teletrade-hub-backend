@@ -10,6 +10,7 @@ require_once __DIR__ . '/../app/Config/database.php';
 require_once __DIR__ . '/../app/Utils/Response.php';
 require_once __DIR__ . '/../app/Utils/Sanitizer.php';
 require_once __DIR__ . '/../app/Middlewares/AuthMiddleware.php';
+require_once __DIR__ . '/../app/Services/SupabaseStorageService.php';
 
 // CORS headers
 header('Access-Control-Allow-Origin: *');
@@ -37,7 +38,11 @@ try {
     }
     
     $file = $_FILES['image'];
-    $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    $allowedMimeToExt = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp'
+    ];
     $maxSize = 5 * 1024 * 1024; // 5MB
     
     // Validate file type
@@ -45,7 +50,7 @@ try {
     $mimeType = finfo_file($finfo, $file['tmp_name']);
     finfo_close($finfo);
     
-    if (!in_array($mimeType, $allowedTypes)) {
+    if (!isset($allowedMimeToExt[$mimeType])) {
         Response::error('Invalid file type. Only JPEG, PNG, and WebP are allowed', 400);
     }
     
@@ -54,24 +59,21 @@ try {
         Response::error('File too large. Maximum size is 5MB', 400);
     }
     
-    // Create uploads directory if it doesn't exist
-    $uploadsDir = __DIR__ . '/uploads/products';
-    if (!is_dir($uploadsDir)) {
-        mkdir($uploadsDir, 0755, true);
+    if (($file['size'] ?? 0) <= 0 || !is_uploaded_file($file['tmp_name'])) {
+        Response::error('Invalid upload payload', 400);
     }
-    
-    // Generate unique filename
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = uniqid('product_') . '_' . time() . '.' . $extension;
-    $filepath = $uploadsDir . '/' . $filename;
-    
-    // Move uploaded file
-    if (!move_uploaded_file($file['tmp_name'], $filepath)) {
-        Response::error('Failed to save uploaded file', 500);
-    }
-    
-    // Return URL (relative path for database storage)
-    $imageUrl = '/uploads/products/' . $filename;
+
+    $extension = $allowedMimeToExt[$mimeType];
+    $filename = 'product_' . date('YmdHis') . '_' . bin2hex(random_bytes(8)) . '.' . $extension;
+    $objectPath = 'products/' . $filename;
+
+    $storage = new SupabaseStorageService();
+    $imageUrl = $storage->uploadFile(
+        $file['tmp_name'],
+        $mimeType,
+        $storage->getProductsBucket(),
+        $objectPath
+    );
     
     Response::success(['url' => $imageUrl], 'Image uploaded successfully');
     

@@ -27,7 +27,7 @@ class Settings
      */
     public function getAll()
     {
-        $sql = "SELECT `key`, `value`, `type` FROM settings";
+        $sql = "SELECT key, value, type FROM settings";
         $stmt = $this->db->query($sql);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
@@ -45,7 +45,7 @@ class Settings
      */
     public function get($key, $default = null)
     {
-        $sql = "SELECT `value`, `type` FROM settings WHERE `key` = :key";
+        $sql = "SELECT value, type FROM settings WHERE key = :key";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':key' => $key]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -62,13 +62,23 @@ class Settings
      */
     public function set($key, $value, $type = 'string', $description = null)
     {
-        $sql = "INSERT INTO settings (`key`, `value`, `type`, `description`) 
-                VALUES (:key, :value, :type, :description)
-                ON DUPLICATE KEY UPDATE 
-                    `value` = VALUES(`value`),
-                    `type` = VALUES(`type`),
-                    `description` = COALESCE(VALUES(`description`), `description`),
-                    `updated_at` = CURRENT_TIMESTAMP";
+        if (Database::isPostgres()) {
+            $sql = "INSERT INTO settings (key, value, type, description) 
+                    VALUES (:key, :value, :type, :description)
+                    ON CONFLICT (key) DO UPDATE SET 
+                        value = EXCLUDED.value,
+                        type = EXCLUDED.type,
+                        description = COALESCE(EXCLUDED.description, settings.description),
+                        updated_at = CURRENT_TIMESTAMP";
+        } else {
+            $sql = "INSERT INTO settings (`key`, `value`, `type`, `description`) 
+                    VALUES (:key, :value, :type, :description)
+                    ON DUPLICATE KEY UPDATE 
+                        `value` = VALUES(`value`),
+                        `type` = VALUES(`type`),
+                        `description` = COALESCE(VALUES(`description`), `description`),
+                        `updated_at` = CURRENT_TIMESTAMP";
+        }
         
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([
@@ -150,4 +160,3 @@ class Settings
         return 'string';
     }
 }
-

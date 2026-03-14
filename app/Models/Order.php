@@ -355,14 +355,15 @@ class Order
      */
     public function getStatistics()
     {
+        $todayExpr = Database::isPostgres() ? 'CURRENT_DATE' : 'CURDATE()';
         $sql = "SELECT 
                 COUNT(*) as total_orders,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_orders,
                 SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing_orders,
                 SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered_orders,
                 SUM(CASE WHEN payment_status = 'paid' THEN total ELSE 0 END) as total_revenue,
-                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) as today_orders,
-                SUM(CASE WHEN DATE(created_at) = CURDATE() AND payment_status = 'paid' THEN total ELSE 0 END) as today_revenue
+                SUM(CASE WHEN DATE(created_at) = {$todayExpr} THEN 1 ELSE 0 END) as today_orders,
+                SUM(CASE WHEN DATE(created_at) = {$todayExpr} AND payment_status = 'paid' THEN total ELSE 0 END) as today_revenue
                 FROM orders";
         
         $stmt = $this->db->query($sql);

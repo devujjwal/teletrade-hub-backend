@@ -11,6 +11,7 @@ require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Utils/Language.php';
 require_once __DIR__ . '/../Utils/Sanitizer.php';
+require_once __DIR__ . '/../Services/SupabaseStorageService.php';
 if (!class_exists('Database')) {
     require_once __DIR__ . '/../Config/database.php';
 }
@@ -32,6 +33,7 @@ class AdminController
     private $settingsModel;
     private $productSyncService;
     private $pricingService;
+    private $supabaseStorage;
     private $db;
 
     public function __construct()
@@ -48,6 +50,7 @@ class AdminController
             $this->settingsModel = null;
             $this->productSyncService = null;
             $this->pricingService = null;
+            $this->supabaseStorage = null;
             $this->db = Database::getConnection();
         } catch (Exception $e) {
             error_log("AdminController constructor error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
@@ -141,6 +144,17 @@ class AdminController
             $this->pricingService = new PricingService();
         }
         return $this->pricingService;
+    }
+
+    /**
+     * Get Supabase storage service instance (lazy-loaded)
+     */
+    private function getSupabaseStorage()
+    {
+        if ($this->supabaseStorage === null) {
+            $this->supabaseStorage = new SupabaseStorageService();
+        }
+        return $this->supabaseStorage;
     }
 
     /**
@@ -395,13 +409,15 @@ class AdminController
             $stats = $this->getOrderModel()->getStatistics();
             
             // Get product stats
-            $productStats = $this->db->query("
-                SELECT 
+            $availableExpr = Database::isPostgres()
+                ? "CASE WHEN LOWER(COALESCE(is_available::text, '0')) IN ('1','t','true') THEN 1 ELSE 0 END"
+                : 'CASE WHEN is_available = 1 THEN 1 ELSE 0 END';
+            $productStatsSql = "SELECT 
                     COUNT(*) as total_products,
-                    SUM(CASE WHEN is_available = 1 THEN 1 ELSE 0 END) as available_products,
+                    SUM({$availableExpr}) as available_products,
                     SUM(stock_quantity) as total_stock
-                FROM products
-            ")->fetch();
+                FROM products";
+            $productStats = $this->db->query($productStatsSql)->fetch();
 
             // Recent orders
             $recentOrders = $this->getOrderModel()->getAll([], 1, 10);
@@ -518,6 +534,7 @@ class AdminController
         // Remove sensitive fields
         foreach ($users as &$user) {
             unset($user['password_hash']);
+            $this->attachSignedRegistrationDocumentUrls($user);
         }
         unset($user);
 
@@ -530,6 +547,78 @@ class AdminController
                 'pages' => (int)ceil($total / $limit)
             ]
         ]);
+    }
+
+    /**
+     * Replace stored registration document values with short-lived signed URLs.
+     */
+    private function attachSignedRegistrationDocumentUrls(array &$user)
+    {
+        $fields = [
+            'id_card_file',
+            'passport_file',
+            'business_registration_certificate_file',
+            'vat_certificate_file',
+            'tax_number_certificate_file'
+        ];
+
+        foreach ($fields as $field) {
+            if (empty($user[$field])) {
+                continue;
+            }
+
+            try {
+                $bucket = $this->getSupabaseStorage()->getRegistrationBucket();
+                $objectPath = $this->extractStorageObjectPath((string) $user[$field], $bucket);
+                if ($objectPath === null) {
+                    continue;
+                }
+
+                $user[$field] = $this->getSupabaseStorage()->createSignedUrl($bucket, $objectPath, 3600);
+            } catch (Exception $e) {
+                error_log('Failed to sign registration document URL for admin user list: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Parse DB-stored object path from full storage URL or plain relative path.
+     */
+    private function extractStorageObjectPath($value, $bucket)
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        // Already stored as relative object path.
+        if (strpos($raw, 'http://') !== 0 && strpos($raw, 'https://') !== 0) {
+            return ltrim($raw, '/');
+        }
+
+        $parsedPath = parse_url($raw, PHP_URL_PATH);
+        if (!is_string($parsedPath) || $parsedPath === '') {
+            return null;
+        }
+
+        $normalizedPath = ltrim($parsedPath, '/');
+        $bucketVariants = [rawurlencode($bucket), $bucket];
+        $prefixes = [];
+
+        foreach ($bucketVariants as $bucketName) {
+            $prefixes[] = 'storage/v1/object/public/' . $bucketName . '/';
+            $prefixes[] = 'storage/v1/object/sign/' . $bucketName . '/';
+            $prefixes[] = 'storage/v1/object/' . $bucketName . '/';
+        }
+
+        foreach ($prefixes as $prefix) {
+            if (strpos($normalizedPath, $prefix) === 0) {
+                $objectPath = substr($normalizedPath, strlen($prefix));
+                return ltrim(rawurldecode($objectPath), '/');
+            }
+        }
+
+        return null;
     }
 
     /**

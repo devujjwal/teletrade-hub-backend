@@ -266,7 +266,7 @@ class ShippingService
     {
         // TODO: Integrate UPS Rate API for real-time shipping calculations
         // For now, return default shipping cost from settings
-        $sql = "SELECT value FROM settings WHERE `key` = :key";
+        $sql = "SELECT value FROM settings WHERE key = :key";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':key' => 'shipping_cost']);
         $result = $stmt->fetch();

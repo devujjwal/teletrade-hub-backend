@@ -344,7 +344,7 @@ class Product
             
             // Only allow whitelisted fields
             if (in_array($cleanKey, $allowedFields, true)) {
-                $fields[] = "`$cleanKey` = :$cleanKey";
+                $fields[] = "$cleanKey = :$cleanKey";
                 $params[":$cleanKey"] = $value;
             }
         }
@@ -523,7 +523,7 @@ class Product
             return [];
         }
         
-        $sql = "SELECT DISTINCT `$field` FROM products WHERE `$field` IS NOT NULL AND is_available = 1 ORDER BY `$field`";
+        $sql = "SELECT DISTINCT {$field} FROM products WHERE {$field} IS NOT NULL AND is_available = 1 ORDER BY {$field}";
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
     }
@@ -538,4 +538,3 @@ class Product
         return $stmt->fetch();
     }
 }
-

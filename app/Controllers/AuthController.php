@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../Models/User.php';
 require_once __DIR__ . '/../Middlewares/RateLimitMiddleware.php';
+require_once __DIR__ . '/../Services/SupabaseStorageService.php';
 
 /**
  * Auth Controller
@@ -11,11 +12,13 @@ class AuthController
 {
     private $userModel;
     private $rateLimiter;
+    private $supabaseStorage;
 
     public function __construct()
     {
         $this->userModel = new User();
         $this->rateLimiter = new RateLimitMiddleware();
+        $this->supabaseStorage = new SupabaseStorageService();
     }
 
     /**
@@ -37,6 +40,9 @@ class AuthController
         $input['email'] = trim((string)($input['email'] ?? ''));
         $input['phone'] = trim((string)($input['phone'] ?? ''));
         $input['mobile'] = trim((string)($input['mobile'] ?? ''));
+        if ($input['phone'] === '') {
+            $input['phone'] = null;
+        }
 
         // SECURITY: Rate limiting to prevent registration spam
         $clientIp = RateLimitMiddleware::getClientIdentifier();
@@ -55,9 +61,16 @@ class AuthController
             'postal_code' => 'required|max:20',
             'city' => 'required|max:100',
             'country' => 'required|max:100',
-            'phone' => 'required|max:50',
-            'mobile' => 'required|max:50'
+            'phone' => 'phone|max:50',
+            'mobile' => 'required|phone|max:50'
         ]);
+
+        if ($input['mobile'] && !preg_match('/^\+?[0-9][0-9\s()\-]{6,19}$/', $input['mobile'])) {
+            $errors['mobile'][] = 'The mobile must be a valid phone number.';
+        }
+        if (!empty($input['phone']) && !preg_match('/^\+?[0-9][0-9\s()\-]{6,19}$/', (string)$input['phone'])) {
+            $errors['phone'][] = 'The phone must be a valid phone number.';
+        }
 
         // Validate merchant-specific fields
         if ($accountType === 'merchant') {
@@ -85,12 +98,16 @@ class AuthController
             Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
         }
 
-        // Check if phone already exists
-        if ($this->userModel->phoneExists($input['phone'])) {
+        // Check if phone/mobile already exists
+        if (!empty($input['phone']) && $this->userModel->phoneExists($input['phone'])) {
+            Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
+        }
+        if ($this->userModel->phoneExists($input['mobile'])) {
             Response::error('You are already registered. You will be able to login once our team approves your account.', 409);
         }
 
         $documents = [];
+        $validatedDocuments = [];
         $requiredDocuments = $accountType === 'merchant'
             ? ['id_card_file', 'passport_file', 'business_registration_certificate_file', 'vat_certificate_file', 'tax_number_certificate_file']
             : ['id_card_file', 'passport_file'];
@@ -101,20 +118,26 @@ class AuthController
                 continue;
             }
 
-            $savedPath = $this->saveRegistrationDocument($_FILES[$field], $accountType, $field);
-            if (!$savedPath) {
+            $validation = $this->validateRegistrationDocument($_FILES[$field]);
+            if (!$validation) {
                 $errors[$field][] = "The $field file must be PDF, JPG, or PNG and up to 10MB.";
                 continue;
             }
 
-            $documents[$field] = $savedPath;
+            $validatedDocuments[$field] = $validation;
         }
 
         if (!empty($errors)) {
             Response::error('Validation failed', 400, $errors);
         }
 
+        $db = null;
+        $uploadedObjectPaths = [];
+
         try {
+            $db = Database::getConnection();
+            $db->beginTransaction();
+
             // Hash password
             $passwordHash = password_hash($input['password'], PASSWORD_BCRYPT);
 
@@ -129,7 +152,7 @@ class AuthController
                 ':postal_code' => Sanitizer::string($input['postal_code']),
                 ':city' => Sanitizer::string($input['city']),
                 ':country' => Sanitizer::string($input['country']),
-                ':phone' => Sanitizer::string($input['phone']),
+                ':phone' => !empty($input['phone']) ? Sanitizer::string((string)$input['phone']) : null,
                 ':mobile' => Sanitizer::string($input['mobile']),
                 ':tax_number' => Sanitizer::string($input['tax_number'] ?? ''),
                 ':vat_number' => Sanitizer::string($input['vat_number'] ?? ''),
@@ -141,15 +164,36 @@ class AuthController
                 ':bank_name' => Sanitizer::string($input['bank_name'] ?? ''),
                 ':iban' => Sanitizer::string($input['iban'] ?? ''),
                 ':bic' => Sanitizer::string($input['bic'] ?? ''),
-                ':id_card_file' => $documents['id_card_file'] ?? null,
-                ':passport_file' => $documents['passport_file'] ?? null,
-                ':business_registration_certificate_file' => $documents['business_registration_certificate_file'] ?? null,
-                ':vat_certificate_file' => $documents['vat_certificate_file'] ?? null,
-                ':tax_number_certificate_file' => $documents['tax_number_certificate_file'] ?? null,
+                ':id_card_file' => null,
+                ':passport_file' => null,
+                ':business_registration_certificate_file' => null,
+                ':vat_certificate_file' => null,
+                ':tax_number_certificate_file' => null,
                 ':is_active' => 0
             ]);
 
+            foreach ($requiredDocuments as $field) {
+                $uploadResult = $this->uploadRegistrationDocument(
+                    $_FILES[$field],
+                    $accountType,
+                    $field,
+                    $validatedDocuments[$field]['mime']
+                );
+
+                if (!$uploadResult) {
+                    throw new Exception("Document upload failed for {$field}");
+                }
+
+                $documents[$field] = $uploadResult['url'];
+                $uploadedObjectPaths[] = $uploadResult['objectPath'];
+            }
+
+            $this->updateRegistrationDocuments($userId, $documents);
+
+            $db->commit();
             $user = $this->userModel->getById($userId);
+
+            $this->attachSignedRegistrationDocumentUrls($user);
 
             // Remove password hash from response
             unset($user['password_hash']);
@@ -159,6 +203,9 @@ class AuthController
                 'message' => 'Registration submitted. You can login after admin approval.'
             ], 'Registration submitted. Awaiting admin approval.', 201);
         } catch (PDOException $e) {
+            if ($db && $db->inTransaction()) {
+                $db->rollBack();
+            }
             error_log('Registration DB Error: ' . $e->getMessage());
 
             $sqlState = $e->errorInfo[0] ?? (string)$e->getCode();
@@ -176,15 +223,25 @@ class AuthController
 
             Response::error('Registration failed due to a database error.', 500);
         } catch (Exception $e) {
+            if ($db && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            foreach ($uploadedObjectPaths as $objectPath) {
+                try {
+                    $this->supabaseStorage->deleteFile($this->supabaseStorage->getRegistrationBucket(), $objectPath);
+                } catch (Exception $cleanupError) {
+                    error_log('Registration cleanup upload delete failed: ' . $cleanupError->getMessage());
+                }
+            }
             error_log('Registration Error: ' . $e->getMessage());
             Response::error('Registration failed. Please try again later.', 500);
         }
     }
 
     /**
-     * Save registration document file and return public path
+     * Validate registration document file and return mime metadata
      */
-    private function saveRegistrationDocument($file, $accountType, $fieldName)
+    private function validateRegistrationDocument($file)
     {
         if (!isset($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])) {
             return null;
@@ -211,6 +268,31 @@ class AuthController
             return null;
         }
 
+        if (!isset($allowedMimeToExt[$mimeType])) {
+            return null;
+        }
+
+        return [
+            'mime' => $mimeType,
+            'extension' => $allowedMimeToExt[$mimeType]
+        ];
+    }
+
+    /**
+     * Upload registration document to Supabase and return URL + object path
+     */
+    private function uploadRegistrationDocument($file, $accountType, $fieldName, $mimeType)
+    {
+        $allowedMimeToExt = [
+            'application/pdf' => 'pdf',
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png'
+        ];
+
+        if (!isset($allowedMimeToExt[$mimeType])) {
+            return null;
+        }
+
         $extension = $allowedMimeToExt[$mimeType];
         $safeField = preg_replace('/[^a-zA-Z0-9_]/', '', $fieldName);
         try {
@@ -219,19 +301,44 @@ class AuthController
             return null;
         }
         $filename = $safeField . '_' . date('YmdHis') . '_' . $randomPart . '.' . $extension;
+        $objectPath = 'registration/' . preg_replace('/[^a-zA-Z0-9_-]/', '', $accountType) . '/' . $filename;
 
-        $relativeDir = '/uploads/registration/' . $accountType;
-        $uploadDir = __DIR__ . '/../../public' . $relativeDir;
-        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+        try {
+            $url = $this->supabaseStorage->uploadFile(
+                $file['tmp_name'],
+                $mimeType,
+                $this->supabaseStorage->getRegistrationBucket(),
+                $objectPath
+            );
+            return [
+                'url' => $url,
+                'objectPath' => $objectPath
+            ];
+        } catch (Exception $e) {
+            error_log('Registration document upload failed: ' . $e->getMessage());
             return null;
         }
+    }
 
-        $destination = $uploadDir . '/' . $filename;
-        if (!move_uploaded_file($file['tmp_name'], $destination)) {
-            return null;
-        }
-
-        return $relativeDir . '/' . $filename;
+    private function updateRegistrationDocuments($userId, $documents)
+    {
+        $db = Database::getConnection();
+        $sql = "UPDATE users
+                SET id_card_file = :id_card_file,
+                    passport_file = :passport_file,
+                    business_registration_certificate_file = :business_registration_certificate_file,
+                    vat_certificate_file = :vat_certificate_file,
+                    tax_number_certificate_file = :tax_number_certificate_file
+                WHERE id = :id";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([
+            ':id' => $userId,
+            ':id_card_file' => $documents['id_card_file'] ?? null,
+            ':passport_file' => $documents['passport_file'] ?? null,
+            ':business_registration_certificate_file' => $documents['business_registration_certificate_file'] ?? null,
+            ':vat_certificate_file' => $documents['vat_certificate_file'] ?? null,
+            ':tax_number_certificate_file' => $documents['tax_number_certificate_file'] ?? null
+        ]);
     }
 
     /**
@@ -284,12 +391,23 @@ class AuthController
                 $db = Database::getConnection();
                 $expiresAt = date('Y-m-d H:i:s', time() + 86400); // 24 hours
                 
-                $sql = "INSERT INTO user_sessions (user_id, token, ip_address, user_agent, expires_at) 
-                        VALUES (:user_id, :token, :ip_address, :user_agent, :expires_at)
-                        ON DUPLICATE KEY UPDATE 
-                            token = VALUES(token), 
-                            expires_at = VALUES(expires_at),
-                            updated_at = CURRENT_TIMESTAMP";
+                if (Database::isPostgres()) {
+                    $sql = "INSERT INTO user_sessions (user_id, token, ip_address, user_agent, expires_at) 
+                            VALUES (:user_id, :token, :ip_address, :user_agent, :expires_at)
+                            ON CONFLICT (user_id) DO UPDATE SET
+                                token = EXCLUDED.token,
+                                ip_address = EXCLUDED.ip_address,
+                                user_agent = EXCLUDED.user_agent,
+                                expires_at = EXCLUDED.expires_at,
+                                updated_at = CURRENT_TIMESTAMP";
+                } else {
+                    $sql = "INSERT INTO user_sessions (user_id, token, ip_address, user_agent, expires_at) 
+                            VALUES (:user_id, :token, :ip_address, :user_agent, :expires_at)
+                            ON DUPLICATE KEY UPDATE 
+                                token = VALUES(token), 
+                                expires_at = VALUES(expires_at),
+                                updated_at = CURRENT_TIMESTAMP";
+                }
                 
                 $stmt = $db->prepare($sql);
                 $stmt->execute([
@@ -327,6 +445,8 @@ class AuthController
             Response::unauthorized('Authentication required');
         }
 
+        $this->attachSignedRegistrationDocumentUrls($user);
+
         // Remove password hash from response
         unset($user['password_hash']);
 
@@ -349,11 +469,9 @@ class AuthController
             Response::error('Invalid request data', 400);
         }
 
-        // Validate input
+        // Only phone can be updated from self-service account page.
         $errors = Validator::validate($input, [
-            'first_name' => 'sometimes|required',
-            'last_name' => 'sometimes|required',
-            'phone' => 'sometimes|string'
+            'phone' => 'sometimes|phone|max:50'
         ]);
 
         if (!empty($errors)) {
@@ -362,24 +480,25 @@ class AuthController
 
         try {
             $updateData = [];
-            if (isset($input['first_name'])) {
-                $updateData[':first_name'] = Sanitizer::string($input['first_name']);
-            }
-            if (isset($input['last_name'])) {
-                $updateData[':last_name'] = Sanitizer::string($input['last_name']);
-            }
             if (isset($input['phone'])) {
-                $updateData[':phone'] = Sanitizer::string($input['phone']);
+                $phone = trim((string)$input['phone']);
+                if ($phone !== '' && !preg_match('/^\+?[0-9][0-9\s()\-]{6,19}$/', $phone)) {
+                    Response::error('Validation failed', 400, [
+                        'phone' => ['The phone must be a valid phone number.']
+                    ]);
+                }
+                $updateData[':phone'] = $phone === '' ? null : Sanitizer::string($phone);
             }
 
             if (empty($updateData)) {
-                Response::error('No fields to update', 400);
+                Response::error('No phone value provided', 400);
             }
 
             $this->userModel->update($user['id'], $updateData);
 
             // Get updated user
             $updatedUser = $this->userModel->getById($user['id']);
+            $this->attachSignedRegistrationDocumentUrls($updatedUser);
             unset($updatedUser['password_hash']);
 
             Response::success(['user' => $updatedUser], 'Profile updated successfully');
@@ -724,6 +843,74 @@ public function getAddresses()
             error_log("Error validating customer token: " . $e->getMessage());
             return null;
         }
+    }
+
+    private function attachSignedRegistrationDocumentUrls(&$user)
+    {
+        if (!is_array($user)) {
+            return;
+        }
+
+        $fields = [
+            'id_card_file',
+            'passport_file',
+            'business_registration_certificate_file',
+            'vat_certificate_file',
+            'tax_number_certificate_file'
+        ];
+
+        foreach ($fields as $field) {
+            if (empty($user[$field])) {
+                continue;
+            }
+
+            try {
+                $bucket = $this->supabaseStorage->getRegistrationBucket();
+                $objectPath = $this->extractStorageObjectPath((string)$user[$field], $bucket);
+                if ($objectPath === null) {
+                    continue;
+                }
+                $user[$field] = $this->supabaseStorage->createSignedUrl($bucket, $objectPath, 3600);
+            } catch (Exception $e) {
+                error_log('Failed to sign user registration document URL: ' . $e->getMessage());
+            }
+        }
+    }
+
+    private function extractStorageObjectPath($value, $bucket)
+    {
+        $raw = trim((string)$value);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (strpos($raw, 'http://') !== 0 && strpos($raw, 'https://') !== 0) {
+            return ltrim($raw, '/');
+        }
+
+        $parsedPath = parse_url($raw, PHP_URL_PATH);
+        if (!is_string($parsedPath) || $parsedPath === '') {
+            return null;
+        }
+
+        $normalizedPath = ltrim($parsedPath, '/');
+        $bucketVariants = [rawurlencode($bucket), $bucket];
+        $prefixes = [];
+
+        foreach ($bucketVariants as $bucketName) {
+            $prefixes[] = 'storage/v1/object/public/' . $bucketName . '/';
+            $prefixes[] = 'storage/v1/object/sign/' . $bucketName . '/';
+            $prefixes[] = 'storage/v1/object/' . $bucketName . '/';
+        }
+
+        foreach ($prefixes as $prefix) {
+            if (strpos($normalizedPath, $prefix) === 0) {
+                $objectPath = substr($normalizedPath, strlen($prefix));
+                return ltrim(rawurldecode($objectPath), '/');
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -201,19 +201,35 @@ class HealthController
         try {
             $db = Database::getConnection();
             
-            $sql = "SELECT 
-                        us.id as session_id,
-                        us.user_id, 
-                        us.expires_at,
-                        us.created_at,
-                        TIMESTAMPDIFF(SECOND, NOW(), us.expires_at) as seconds_until_expiry,
-                        u.email,
-                        u.first_name,
-                        u.last_name,
-                        u.is_active
-                    FROM user_sessions us
-                    JOIN users u ON us.user_id = u.id
-                    WHERE us.token = :token";
+            if (Database::isPostgres()) {
+                $sql = "SELECT 
+                            us.id as session_id,
+                            us.user_id, 
+                            us.expires_at,
+                            us.created_at,
+                            EXTRACT(EPOCH FROM (us.expires_at - NOW()))::INT as seconds_until_expiry,
+                            u.email,
+                            u.first_name,
+                            u.last_name,
+                            u.is_active
+                        FROM user_sessions us
+                        JOIN users u ON us.user_id = u.id
+                        WHERE us.token = :token";
+            } else {
+                $sql = "SELECT 
+                            us.id as session_id,
+                            us.user_id, 
+                            us.expires_at,
+                            us.created_at,
+                            TIMESTAMPDIFF(SECOND, NOW(), us.expires_at) as seconds_until_expiry,
+                            u.email,
+                            u.first_name,
+                            u.last_name,
+                            u.is_active
+                        FROM user_sessions us
+                        JOIN users u ON us.user_id = u.id
+                        WHERE us.token = :token";
+            }
             
             $stmt = $db->prepare($sql);
             $stmt->execute([':token' => $token]);
@@ -258,4 +274,3 @@ class HealthController
         }
     }
 }
-

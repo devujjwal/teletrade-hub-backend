@@ -837,16 +837,29 @@ class ProductSyncService
             return;
         }
 
-        $sql = "UPDATE vendor_sync_log SET 
-                status = :status,
-                products_synced = :synced,
-                products_added = :added,
-                products_updated = :updated,
-                products_disabled = :disabled,
-                error_message = :error,
-                completed_at = NOW(),
-                duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW())
-                WHERE id = :id";
+        if (Database::isPostgres()) {
+            $sql = "UPDATE vendor_sync_log SET 
+                    status = :status,
+                    products_synced = :synced,
+                    products_added = :added,
+                    products_updated = :updated,
+                    products_disabled = :disabled,
+                    error_message = :error,
+                    completed_at = NOW(),
+                    duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::INT
+                    WHERE id = :id";
+        } else {
+            $sql = "UPDATE vendor_sync_log SET 
+                    status = :status,
+                    products_synced = :synced,
+                    products_added = :added,
+                    products_updated = :updated,
+                    products_disabled = :disabled,
+                    error_message = :error,
+                    completed_at = NOW(),
+                    duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW())
+                    WHERE id = :id";
+        }
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
@@ -870,4 +883,3 @@ class ProductSyncService
         return $stmt->fetch();
     }
 }
-
