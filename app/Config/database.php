@@ -42,26 +42,34 @@ class Database
 
                         $host = $parts['host'] ?? Env::get('DB_HOST', 'localhost');
                         $port = $parts['port'] ?? intval(Env::get('DB_PORT', 5432));
-                        $dbname = $parts['dbname'] ?? Env::get('DB_NAME', 'postgres');
-                        $username = $parts['user'] ?? Env::get('DB_USER', 'postgres');
+                        $dbname = $parts['dbname'] ?? Env::get('DB_NAME', Env::get('DB_DATABASE', 'postgres'));
+                        $username = $parts['user'] ?? Env::get('DB_USER', Env::get('DB_USERNAME', 'postgres'));
                         $password = $parts['pass'] ?? Env::get('DB_PASSWORD', '');
+                        $sslmode = $parts['sslmode'] ?? Env::get('DB_SSLMODE', '');
                     } else {
                         $host = Env::get('DB_HOST', 'localhost');
                         $port = intval(Env::get('DB_PORT', 5432));
-                        $dbname = Env::get('DB_NAME', 'postgres');
-                        $username = Env::get('DB_USER', 'postgres');
+                        $dbname = Env::get('DB_NAME', Env::get('DB_DATABASE', 'postgres'));
+                        $username = Env::get('DB_USER', Env::get('DB_USERNAME', 'postgres'));
                         $password = Env::get('DB_PASSWORD', '');
+                        $sslmode = Env::get('DB_SSLMODE', '');
                     }
 
                     $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
+                    if (!empty($sslmode)) {
+                        $dsn .= ";sslmode={$sslmode}";
+                    } elseif (strpos((string)$host, 'supabase.co') !== false) {
+                        // Supabase pooler/direct connections require SSL in production.
+                        $dsn .= ";sslmode=require";
+                    }
                     self::$connection = new PDO($dsn, $username, $password, $options);
                     self::$connection->exec("SET TIME ZONE 'UTC'");
                 } else {
                     self::$driver = 'mysql';
 
                     $host = Env::get('DB_HOST', 'localhost');
-                    $dbname = Env::get('DB_NAME', 'vsmjr110_api');
-                    $username = Env::get('DB_USER', 'vsmjr110_ujjwal');
+                    $dbname = Env::get('DB_NAME', Env::get('DB_DATABASE', 'vsmjr110_api'));
+                    $username = Env::get('DB_USER', Env::get('DB_USERNAME', 'vsmjr110_ujjwal'));
                     $password = Env::get('DB_PASSWORD', '');
                     $port = intval(Env::get('DB_PORT', 3306));
 
@@ -153,6 +161,7 @@ class Database
         $pathAndQuery = substr($remainder, $pathPos + 1);
         $queryPos = strpos($pathAndQuery, '?');
         $dbname = $queryPos === false ? $pathAndQuery : substr($pathAndQuery, 0, $queryPos);
+        $queryString = $queryPos === false ? '' : substr($pathAndQuery, $queryPos + 1);
         $dbname = trim($dbname, '/');
 
         $user = null;
@@ -181,12 +190,18 @@ class Database
             }
         }
 
+        $queryParams = [];
+        if ($queryString !== '') {
+            parse_str($queryString, $queryParams);
+        }
+
         return [
             'host' => $host !== '' ? $host : null,
             'port' => $port,
             'dbname' => $dbname !== '' ? $dbname : null,
             'user' => $user !== null ? urldecode($user) : null,
-            'pass' => $pass !== null ? urldecode($pass) : null
+            'pass' => $pass !== null ? urldecode($pass) : null,
+            'sslmode' => isset($queryParams['sslmode']) ? (string)$queryParams['sslmode'] : null
         ];
     }
 }
