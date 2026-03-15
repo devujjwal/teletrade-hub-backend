@@ -242,6 +242,7 @@ class VendorApiService
 
         try {
             $db = Database::getConnection();
+            $this->synchronizePostgresSequence($db, 'vendor_api_logs', 'id');
             $sql = "INSERT INTO vendor_api_logs (
                 endpoint, method, request_payload, response_payload, 
                 status_code, duration_ms, error_message
@@ -267,6 +268,35 @@ class VendorApiService
     }
 
     /**
+     * Repair imported PostgreSQL identity/serial sequences before inserts.
+     */
+    private function synchronizePostgresSequence(PDO $db, $table, $column)
+    {
+        if (!Database::isPostgres()) {
+            return;
+        }
+
+        $sequenceStmt = $db->prepare("SELECT pg_get_serial_sequence(:table_name, :column_name)");
+        $sequenceStmt->execute([
+            ':table_name' => $table,
+            ':column_name' => $column
+        ]);
+        $sequenceName = $sequenceStmt->fetchColumn();
+
+        if (!$sequenceName) {
+            return;
+        }
+
+        $sql = "SELECT setval(
+                    :sequence_name,
+                    COALESCE((SELECT MAX({$column}) FROM {$table}), 0) + 1,
+                    false
+                )";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':sequence_name' => $sequenceName]);
+    }
+
+    /**
      * Check API health
      */
     public function checkHealth()
@@ -280,4 +310,3 @@ class VendorApiService
         }
     }
 }
-
