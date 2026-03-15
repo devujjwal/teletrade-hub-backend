@@ -821,11 +821,53 @@ class ProductSyncService
      */
     private function startSyncLog()
     {
-        $sql = "INSERT INTO vendor_sync_log (sync_type, status, started_at) 
+        if (Database::isPostgres()) {
+            $this->synchronizePostgresSequence('vendor_sync_log', 'id');
+
+            $sql = "INSERT INTO vendor_sync_log (sync_type, status, started_at)
+                    VALUES ('full', 'in_progress', NOW())
+                    RETURNING id";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute();
+            $this->syncLogId = (int)$stmt->fetchColumn();
+            return;
+        }
+
+        $sql = "INSERT INTO vendor_sync_log (sync_type, status, started_at)
                 VALUES ('full', 'in_progress', NOW())";
         $stmt = $this->db->prepare($sql);
         $stmt->execute();
         $this->syncLogId = $this->db->lastInsertId();
+    }
+
+    /**
+     * Bring a PostgreSQL identity/serial sequence back in line with imported rows.
+     * This keeps inserts working after data migrations that included explicit IDs.
+     */
+    private function synchronizePostgresSequence($table, $column)
+    {
+        if (!Database::isPostgres()) {
+            return;
+        }
+
+        $sequenceStmt = $this->db->prepare("SELECT pg_get_serial_sequence(:table_name, :column_name)");
+        $sequenceStmt->execute([
+            ':table_name' => $table,
+            ':column_name' => $column
+        ]);
+        $sequenceName = $sequenceStmt->fetchColumn();
+
+        if (!$sequenceName) {
+            return;
+        }
+
+        $sql = "SELECT setval(
+                    :sequence_name,
+                    COALESCE((SELECT MAX({$column}) FROM {$table}), 0) + 1,
+                    false
+                )";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':sequence_name' => $sequenceName]);
     }
 
     /**
