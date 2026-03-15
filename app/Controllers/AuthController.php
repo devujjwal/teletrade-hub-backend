@@ -200,8 +200,8 @@ class AuthController
 
             Response::success([
                 'user' => $user,
-                'message' => 'Registration submitted. You can login after admin approval.'
-            ], 'Registration submitted. Awaiting admin approval.', 201);
+                'message' => 'Registration submitted successfully. Your account is pending admin approval and we will notify you by email once it is verified.'
+            ], 'Registration submitted successfully. Your account is pending admin approval and we will notify you by email once it is verified.', 201);
         } catch (PDOException $e) {
             if ($db && $db->inTransaction()) {
                 $db->rollBack();
@@ -367,15 +367,20 @@ class AuthController
         }
 
         try {
-            $user = $this->userModel->getByEmail($input['email']);
+            $email = trim((string)($input['email'] ?? ''));
+            $password = (string)($input['password'] ?? '');
+            $user = $this->userModel->getByEmail($email);
 
-            if (!$user || !password_verify($input['password'], $user['password_hash'])) {
-                // SECURITY: Generic error message to prevent user enumeration
-                Response::error('Invalid email or password', 401);
+            if (!$user) {
+                Response::error('No account was found for this email address. Please recheck the email and try again.', 404);
+            }
+
+            if (!password_verify($password, $user['password_hash'])) {
+                Response::error('The password you entered is incorrect. Please try again.', 401);
             }
 
             if (!$user['is_active']) {
-                Response::error('Your account is not approved yet. You can login once our team approves your account.', 403);
+                Response::error('Your account is pending admin approval. We will notify you by email as soon as it has been verified.', 403);
             }
 
             // SECURITY: Clear rate limit on successful login
