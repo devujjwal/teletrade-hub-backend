@@ -28,9 +28,14 @@ jobs:
           script_stop: true
           script: |
             cd /var/www/teletrade-hub-backend
+            sudo chown -R ubuntu:ubuntu storage
+            git stash push --include-untracked --message "github-actions-deploy-$(date +%s)" || true
             git fetch origin main
             git pull --ff-only origin main
             php -l app/Services/SupabaseStorageService.php
+            sudo chown -R www-data:www-data storage
+            sudo find storage -type d -exec chmod 775 {} \;
+            sudo find storage -type f -exec chmod 664 {} \;
             sudo systemctl restart php8.1-fpm
             sudo systemctl reload nginx
             curl -fsS https://api.ujjwal.in/health >/dev/null
