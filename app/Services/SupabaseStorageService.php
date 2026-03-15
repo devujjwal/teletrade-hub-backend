@@ -142,42 +142,44 @@ class SupabaseStorageService
 
     private function request($method, $url, $body = null, $headers = [])
     {
+        if (!function_exists('curl_init')) {
+            throw new Exception('cURL extension is required for Supabase Storage requests');
+        }
+
         $requestHeaders = array_merge([
             'Authorization: Bearer ' . $this->serviceRoleKey,
             'apikey: ' . $this->serviceRoleKey
         ], $headers);
 
-        $options = [
-            'http' => [
-                'method' => strtoupper($method),
-                'header' => implode("\r\n", $requestHeaders) . "\r\n",
-                'ignore_errors' => true,
-                'timeout' => 30
-            ]
-        ];
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_HEADER, true);
 
         if ($body !== null) {
-            $options['http']['content'] = $body;
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
 
-        $context = stream_context_create($options);
-        $responseBody = @file_get_contents($url, false, $context);
-        $responseHeaders = function_exists('http_get_last_response_headers')
-            ? (http_get_last_response_headers() ?: [])
-            : [];
+        $response = curl_exec($ch);
+        if ($response === false) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            throw new Exception('Unable to connect to Supabase Storage' . ($error ? ': ' . $error : ''));
+        }
 
-        if ($responseBody === false && empty($responseHeaders)) {
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        curl_close($ch);
+
+        if ($headerSize <= 0) {
             throw new Exception('Unable to connect to Supabase Storage');
-        }
-
-        $status = 0;
-        if (!empty($responseHeaders[0]) && preg_match('#\s(\d{3})\s#', $responseHeaders[0], $matches)) {
-            $status = (int) $matches[1];
         }
 
         return [
             'status' => $status,
-            'body' => $responseBody === false ? '' : $responseBody
+            'body' => substr($response, $headerSize)
         ];
     }
 

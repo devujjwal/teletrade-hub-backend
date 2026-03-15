@@ -1,0 +1,36 @@
+name: Deploy Backend
+
+on:
+  workflow_run:
+    workflows:
+      - Backend Tests
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: backend-production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to Oracle VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.OCI_VM_HOST }}
+          username: ${{ secrets.OCI_VM_USER }}
+          key: ${{ secrets.OCI_VM_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            cd /var/www/teletrade-hub-backend
+            git fetch origin main
+            git pull --ff-only origin main
+            php -l app/Services/SupabaseStorageService.php
+            sudo systemctl restart php8.1-fpm
+            sudo systemctl reload nginx
+            curl -fsS https://api.ujjwal.in/health >/dev/null
