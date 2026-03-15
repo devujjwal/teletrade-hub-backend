@@ -193,6 +193,7 @@ class TestDatabase
         CREATE TABLE IF NOT EXISTS pricing_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rule_type VARCHAR(20) NOT NULL,
+            account_type VARCHAR(20) NOT NULL DEFAULT 'customer',
             entity_id INTEGER,
             markup_type VARCHAR(20) DEFAULT 'percentage',
             markup_value DECIMAL(10,2) NOT NULL,
@@ -268,8 +269,8 @@ class TestDatabase
         
         // Insert default pricing rule
         self::$connection->exec("
-            INSERT INTO pricing_rules (rule_type, markup_type, markup_value, priority, is_active)
-            VALUES ('global', 'percentage', 15.0, 0, 1)
+            INSERT INTO pricing_rules (rule_type, account_type, markup_type, markup_value, priority, is_active)
+            VALUES ('global', 'customer', 'percentage', 15.0, 0, 1)
         ");
         
         // Insert default settings
@@ -297,8 +298,8 @@ class TestDatabase
             // Reset pricing rules to default
             self::$connection->exec("DELETE FROM pricing_rules");
             self::$connection->exec("
-                INSERT INTO pricing_rules (rule_type, markup_type, markup_value, priority, is_active)
-                VALUES ('global', 'percentage', 15.0, 0, 1)
+                INSERT INTO pricing_rules (rule_type, account_type, markup_type, markup_value, priority, is_active)
+                VALUES ('global', 'customer', 'percentage', 15.0, 0, 1)
             ");
         }
     }
@@ -357,4 +358,3 @@ if (!class_exists('Database')) {
 }
 
 echo "✓ Test environment initialized\n";
-
