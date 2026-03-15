@@ -136,6 +136,46 @@ class AdminController
     }
 
     /**
+     * Check whether a sync job is already active.
+     */
+    private function isSyncRunning()
+    {
+        $lastSync = $this->getProductSyncService()->getLastSyncStatus();
+
+        if (!$lastSync) {
+            return false;
+        }
+
+        return ($lastSync['status'] ?? null) === 'in_progress' && empty($lastSync['completed_at']);
+    }
+
+    /**
+     * Launch product sync in a detached background PHP process.
+     */
+    private function dispatchProductSync($languageIds = null)
+    {
+        $scriptPath = realpath(__DIR__ . '/../../bin/run-product-sync.php');
+
+        if (!$scriptPath || !file_exists($scriptPath)) {
+            throw new Exception('Background sync runner not found');
+        }
+
+        $payload = base64_encode(json_encode($languageIds ?? []));
+        $command = sprintf(
+            '%s %s %s > /dev/null 2>&1 &',
+            escapeshellarg(PHP_BINARY),
+            escapeshellarg($scriptPath),
+            escapeshellarg($payload)
+        );
+
+        exec($command, $output, $exitCode);
+
+        if ($exitCode !== 0) {
+            throw new Exception('Failed to start background sync process');
+        }
+    }
+
+    /**
      * Get pricing service instance (lazy-loaded)
      */
     private function getPricingService()
@@ -1251,6 +1291,10 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
 
         try {
+            if ($this->isSyncRunning()) {
+                Response::error('A product sync is already in progress. Please wait for it to finish.', 409);
+            }
+
             // Support specific language IDs or sync all languages
             $languageIds = null;
             
@@ -1263,10 +1307,12 @@ class AdminController
                 $languageIds = [$langId];
             }
             
-            // Sync products (null = all languages)
-            $stats = $this->getProductSyncService()->syncProducts($languageIds);
-            
-            Response::success($stats, 'Product sync completed successfully');
+            $this->dispatchProductSync($languageIds);
+
+            Response::success([
+                'status' => 'started',
+                'languages' => $languageIds,
+            ], 'Product sync started successfully');
         } catch (Exception $e) {
             Response::error('Sync failed: ' . $e->getMessage(), 500);
         }
