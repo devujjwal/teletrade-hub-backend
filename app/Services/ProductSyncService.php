@@ -14,6 +14,9 @@ require_once __DIR__ . '/../Utils/Language.php';
  */
 class ProductSyncService
 {
+    private const SYNC_LOG_RETENTION_DAYS = 180;
+    private const MAX_SYNC_LOG_ROWS = 1000;
+
     private $vendorApi;
     private $productModel;
     private $categoryModel;
@@ -21,6 +24,7 @@ class ProductSyncService
     private $pricingService;
     private $db;
     private $syncLogId;
+    private static $syncRetentionPruned = false;
 
     public function __construct()
     {
@@ -830,6 +834,7 @@ class ProductSyncService
             $stmt = $this->db->prepare($sql);
             $stmt->execute();
             $this->syncLogId = (int)$stmt->fetchColumn();
+            $this->pruneSyncLogs();
             return;
         }
 
@@ -838,6 +843,7 @@ class ProductSyncService
         $stmt = $this->db->prepare($sql);
         $stmt->execute();
         $this->syncLogId = $this->db->lastInsertId();
+        $this->pruneSyncLogs();
     }
 
     /**
@@ -868,6 +874,61 @@ class ProductSyncService
                 )";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':sequence_name' => $sequenceName]);
+    }
+
+    /**
+     * Sync logs are useful for audit/history, but we only need a limited window.
+     * Cleanup runs once per process to keep sync startup inexpensive.
+     */
+    private function pruneSyncLogs()
+    {
+        if (self::$syncRetentionPruned) {
+            return;
+        }
+
+        self::$syncRetentionPruned = true;
+
+        if (Database::isPostgres()) {
+            $stmt = $this->db->prepare(
+                "DELETE FROM vendor_sync_log
+                 WHERE started_at < NOW() - (:retention_days || ' days')::INTERVAL"
+            );
+            $stmt->execute([':retention_days' => self::SYNC_LOG_RETENTION_DAYS]);
+
+            $stmt = $this->db->prepare(
+                "DELETE FROM vendor_sync_log
+                 WHERE id IN (
+                     SELECT id
+                     FROM vendor_sync_log
+                     ORDER BY started_at DESC, id DESC
+                     OFFSET :max_rows
+                 )"
+            );
+            $stmt->bindValue(':max_rows', self::MAX_SYNC_LOG_ROWS, PDO::PARAM_INT);
+            $stmt->execute();
+            return;
+        }
+
+        $stmt = $this->db->prepare(
+            "DELETE FROM vendor_sync_log
+             WHERE started_at < DATE_SUB(NOW(), INTERVAL :retention_days DAY)"
+        );
+        $stmt->bindValue(':retention_days', self::SYNC_LOG_RETENTION_DAYS, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $stmt = $this->db->prepare(
+            "DELETE FROM vendor_sync_log
+             WHERE id NOT IN (
+                 SELECT id FROM (
+                     SELECT id
+                     FROM vendor_sync_log
+                     ORDER BY started_at DESC, id DESC
+                     LIMIT :max_rows
+                 ) AS retained_logs
+             )"
+        );
+        $stmt->bindValue(':max_rows', self::MAX_SYNC_LOG_ROWS, PDO::PARAM_INT);
+        $stmt->execute();
     }
 
     /**

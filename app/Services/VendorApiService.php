@@ -8,9 +8,13 @@ require_once __DIR__ . '/../Utils/Language.php';
  */
 class VendorApiService
 {
+    private const LOG_RETENTION_DAYS = 30;
+    private const MAX_LOG_ROWS = 10000;
+
     private $baseUrl;
     private $apiKey;
     private $logEnabled;
+    private static $retentionPruned = false;
 
     public function __construct()
     {
@@ -261,10 +265,66 @@ class VendorApiService
                 ':duration' => $duration,
                 ':error' => $error
             ]);
+            $this->pruneApiLogs($db);
         } catch (Exception $e) {
             // Silent fail for logging
             error_log("Failed to log vendor API call: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Retain only recent and useful vendor API logs.
+     * Cleanup runs once per process so normal API traffic stays lightweight.
+     */
+    private function pruneApiLogs(PDO $db)
+    {
+        if (self::$retentionPruned) {
+            return;
+        }
+
+        self::$retentionPruned = true;
+
+        if (Database::isPostgres()) {
+            $stmt = $db->prepare(
+                "DELETE FROM vendor_api_logs
+                 WHERE created_at < NOW() - (:retention_days || ' days')::INTERVAL"
+            );
+            $stmt->execute([':retention_days' => self::LOG_RETENTION_DAYS]);
+
+            $stmt = $db->prepare(
+                "DELETE FROM vendor_api_logs
+                 WHERE id IN (
+                     SELECT id
+                     FROM vendor_api_logs
+                     ORDER BY created_at DESC, id DESC
+                     OFFSET :max_rows
+                 )"
+            );
+            $stmt->bindValue(':max_rows', self::MAX_LOG_ROWS, PDO::PARAM_INT);
+            $stmt->execute();
+            return;
+        }
+
+        $stmt = $db->prepare(
+            "DELETE FROM vendor_api_logs
+             WHERE created_at < DATE_SUB(NOW(), INTERVAL :retention_days DAY)"
+        );
+        $stmt->bindValue(':retention_days', self::LOG_RETENTION_DAYS, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $stmt = $db->prepare(
+            "DELETE FROM vendor_api_logs
+             WHERE id NOT IN (
+                 SELECT id FROM (
+                     SELECT id
+                     FROM vendor_api_logs
+                     ORDER BY created_at DESC, id DESC
+                     LIMIT :max_rows
+                 ) AS retained_logs
+             )"
+        );
+        $stmt->bindValue(':max_rows', self::MAX_LOG_ROWS, PDO::PARAM_INT);
+        $stmt->execute();
     }
 
     /**
