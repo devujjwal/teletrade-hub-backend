@@ -55,14 +55,30 @@ class Database
                         $sslmode = Env::get('DB_SSLMODE', '');
                     }
 
-                    $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
-                    if (!empty($sslmode)) {
-                        $dsn .= ";sslmode={$sslmode}";
-                    } elseif (strpos((string)$host, 'supabase.co') !== false) {
-                        // Supabase pooler/direct connections require SSL in production.
-                        $dsn .= ";sslmode=require";
+                    $connectionAttempts = self::buildPostgresConnectionAttempts($host, $port, $dbname, $sslmode);
+                    $lastException = null;
+
+                    foreach ($connectionAttempts as $attempt) {
+                        $dsn = self::buildPostgresDsn(
+                            $attempt['host'],
+                            $attempt['port'],
+                            $attempt['dbname'],
+                            $attempt['sslmode']
+                        );
+
+                        try {
+                            self::$connection = new PDO($dsn, $username, $password, $options);
+                            break;
+                        } catch (PDOException $e) {
+                            $lastException = $e;
+                            error_log("Database Connection Error: " . $e->getMessage());
+                        }
                     }
-                    self::$connection = new PDO($dsn, $username, $password, $options);
+
+                    if (self::$connection === null) {
+                        throw $lastException ?: new PDOException('Unable to connect to PostgreSQL');
+                    }
+
                     self::$connection->exec("SET TIME ZONE 'UTC'");
                 } else {
                     self::$driver = 'mysql';
@@ -203,5 +219,54 @@ class Database
             'pass' => $pass !== null ? urldecode($pass) : null,
             'sslmode' => isset($queryParams['sslmode']) ? (string)$queryParams['sslmode'] : null
         ];
+    }
+
+    private static function buildPostgresConnectionAttempts($host, $port, $dbname, $sslmode)
+    {
+        $attempts = [[
+            'host' => $host,
+            'port' => $port,
+            'dbname' => $dbname,
+            'sslmode' => self::normalizeSslmode($host, $sslmode)
+        ]];
+
+        // Shared hosting commonly cannot reach transaction pooler on 6543 but can reach session pooler on 5432.
+        if (self::isSupabasePoolerHost($host) && (int)$port === 6543) {
+            $attempts[] = [
+                'host' => $host,
+                'port' => 5432,
+                'dbname' => $dbname,
+                'sslmode' => self::normalizeSslmode($host, $sslmode)
+            ];
+        }
+
+        return $attempts;
+    }
+
+    private static function buildPostgresDsn($host, $port, $dbname, $sslmode)
+    {
+        $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
+        if (!empty($sslmode)) {
+            $dsn .= ";sslmode={$sslmode}";
+        }
+        return $dsn;
+    }
+
+    private static function normalizeSslmode($host, $sslmode)
+    {
+        if (!empty($sslmode)) {
+            return $sslmode;
+        }
+
+        if (strpos((string)$host, 'supabase.co') !== false) {
+            return 'require';
+        }
+
+        return '';
+    }
+
+    private static function isSupabasePoolerHost($host)
+    {
+        return is_string($host) && strpos($host, '.pooler.supabase.com') !== false;
     }
 }
