@@ -341,8 +341,10 @@ class MockVendorApi
     }
 }
 
-// Provide Database class for testing (uses TestDatabase internally)
-if (!class_exists('Database')) {
+// Provide Database class for testing (uses TestDatabase internally).
+// Avoid autoloading the production Database class here so PHPUnit always
+// stays pinned to the in-memory SQLite connection defined above.
+if (!class_exists('Database', false)) {
     class Database
     {
         public static function getConnection()
