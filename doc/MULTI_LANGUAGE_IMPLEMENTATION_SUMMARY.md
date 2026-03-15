@@ -53,7 +53,7 @@ mysql -u your_user -p your_database < database/add_languages_migration.sql
 
 Visit in your browser:
 ```
-https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345
+https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345
 ```
 
 This will sync products in all 11 languages (takes ~5-8 minutes).
@@ -62,16 +62,16 @@ This will sync products in all 11 languages (takes ~5-8 minutes).
 
 ```bash
 # English
-curl "https://api.vs-mjrinfotech.com/products?lang=en"
+curl "https://api.ujjwal.in/products?lang=en"
 
 # German
-curl "https://api.vs-mjrinfotech.com/products?lang=de"
+curl "https://api.ujjwal.in/products?lang=de"
 
 # French
-curl "https://api.vs-mjrinfotech.com/products?lang=4"  # Using ID
+curl "https://api.ujjwal.in/products?lang=4"  # Using ID
 
 # Get supported languages
-curl "https://api.vs-mjrinfotech.com/languages"
+curl "https://api.ujjwal.in/languages"
 ```
 
 ## 📋 Supported Languages
@@ -170,7 +170,7 @@ const userLang = navigator.language.split('-')[0];
 
 // Fetch products in user's language
 const response = await fetch(
-  `https://api.vs-mjrinfotech.com/products?lang=${userLang}`
+  `https://api.ujjwal.in/products?lang=${userLang}`
 );
 const data = await response.json();
 console.log(data.data.products);
@@ -208,12 +208,12 @@ Add these buttons to your admin panel:
 
 ```html
 <!-- Sync all languages -->
-<button onclick="window.open('https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345')">
+<button onclick="window.open('https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345')">
   Sync All Languages
 </button>
 
 <!-- Sync specific languages -->
-<button onclick="window.open('https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345&languages=3,4,5')">
+<button onclick="window.open('https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345&languages=3,4,5')">
   Sync DE, FR, ES
 </button>
 ```

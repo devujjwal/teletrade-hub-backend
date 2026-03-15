@@ -76,7 +76,7 @@ CREATE TABLE addresses (
 ## Migration Steps
 
 ### Step 1: Update the addresses table
-Visit: `https://api.vs-mjrinfotech.com/update-addresses-table.php`
+Visit: `https://api.ujjwal.in/update-addresses-table.php`
 
 This will:
 - ✅ Add `label` column
@@ -87,7 +87,7 @@ This will:
 
 ### Step 2: Test address creation
 ```bash
-curl -X POST https://api.vs-mjrinfotech.com/auth/addresses \
+curl -X POST https://api.ujjwal.in/auth/addresses \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -169,11 +169,11 @@ The frontend was already sending the correct format (`street`, `street2`, `label
 ## Debug Tools
 
 1. **Authentication debug:**  
-   `https://api.vs-mjrinfotech.com/debug-auth.php`
+   `https://api.ujjwal.in/debug-auth.php`
 
 2. **Create user_sessions table:**  
-   `https://api.vs-mjrinfotech.com/create-user-sessions-table.php`
+   `https://api.ujjwal.in/create-user-sessions-table.php`
 
 3. **Update addresses table:**  
-   `https://api.vs-mjrinfotech.com/update-addresses-table.php`
+   `https://api.ujjwal.in/update-addresses-table.php`
 

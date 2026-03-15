@@ -76,19 +76,19 @@ This document lists the API endpoints that were missing and have now been implem
 - `created_at` - Session creation timestamp
 - `updated_at` - Session update timestamp
 
-**To Create:** Visit `https://api.vs-mjrinfotech.com/create-user-sessions-table.php`
+**To Create:** Visit `https://api.ujjwal.in/create-user-sessions-table.php`
 
 ## Testing
 
 ### Test Order List
 ```bash
-curl -X GET https://api.vs-mjrinfotech.com/orders \
+curl -X GET https://api.ujjwal.in/orders \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### Test Password Change
 ```bash
-curl -X PUT https://api.vs-mjrinfotech.com/auth/password \
+curl -X PUT https://api.ujjwal.in/auth/password \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -100,7 +100,7 @@ curl -X PUT https://api.vs-mjrinfotech.com/auth/password \
 
 ### Test Logout
 ```bash
-curl -X POST https://api.vs-mjrinfotech.com/auth/logout \
+curl -X POST https://api.ujjwal.in/auth/logout \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -138,7 +138,7 @@ curl -X POST https://api.vs-mjrinfotech.com/auth/logout \
 ## Debug Scripts
 
 ### Authentication Debug
-`https://api.vs-mjrinfotech.com/debug-auth.php`
+`https://api.ujjwal.in/debug-auth.php`
 
 Shows:
 - Token validity
@@ -147,7 +147,7 @@ Shows:
 - Authorization header status
 
 ### Create Missing Table
-`https://api.vs-mjrinfotech.com/create-user-sessions-table.php`
+`https://api.ujjwal.in/create-user-sessions-table.php`
 
 Creates the `user_sessions` table if it doesn't exist.
 

@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0  
 **Owner:** Telecommunication Trading e.K.  
-**Base URL:** `https://api.vs-mjrinfotech.com`  
+**Base URL:** `https://api.ujjwal.in`  
 **Last Updated:** January 7, 2026
 
 ---
@@ -37,7 +37,7 @@
 The TeleTrade Hub API provides a comprehensive REST interface for managing an e-commerce platform specializing in telecommunication products. This API supports both customer-facing operations and administrative functions.
 
 ### API Status
-Check the current API status at: [https://api.vs-mjrinfotech.com/health](https://api.vs-mjrinfotech.com/health)
+Check the current API status at: [https://api.ujjwal.in/health](https://api.ujjwal.in/health)
 
 ### Key Features
 - Product catalog with advanced filtering
@@ -132,7 +132,7 @@ Get API information
 
 **Example Request:**
 ```bash
-curl https://api.vs-mjrinfotech.com/
+curl https://api.ujjwal.in/
 ```
 
 **Response:**
@@ -156,7 +156,7 @@ Health check endpoint
 
 **Example Request:**
 ```bash
-curl https://api.vs-mjrinfotech.com/health
+curl https://api.ujjwal.in/health
 ```
 
 **Response:**
@@ -290,7 +290,7 @@ Get products list with filters and pagination
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/products?category_id=1&page=1&limit=20&sort=price&order=asc"
+curl "https://api.ujjwal.in/products?category_id=1&page=1&limit=20&sort=price&order=asc"
 ```
 
 **Success Response:**
@@ -355,7 +355,7 @@ Get single product details
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/products/1?lang=en"
+curl "https://api.ujjwal.in/products/1?lang=en"
 ```
 
 **Success Response:**
@@ -419,7 +419,7 @@ Search products by query
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/products/search?q=iPhone&page=1&limit=20"
+curl "https://api.ujjwal.in/products/search?q=iPhone&page=1&limit=20"
 ```
 
 **Success Response:**
@@ -446,7 +446,7 @@ Get all categories with product count
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/categories?lang=en"
+curl "https://api.ujjwal.in/categories?lang=en"
 ```
 
 **Success Response:**
@@ -489,7 +489,7 @@ Get products by category
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/categories/1/products?page=1&limit=20"
+curl "https://api.ujjwal.in/categories/1/products?page=1&limit=20"
 ```
 
 **Success Response:**
@@ -517,7 +517,7 @@ Get all brands with product count
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/brands"
+curl "https://api.ujjwal.in/brands"
 ```
 
 **Success Response:**
@@ -560,7 +560,7 @@ Get products by brand
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/brands/1/products?page=1&limit=20"
+curl "https://api.ujjwal.in/brands/1/products?page=1&limit=20"
 ```
 
 **Success Response:**
@@ -709,7 +709,7 @@ Get order details
 
 **Example Request:**
 ```bash
-curl "https://api.vs-mjrinfotech.com/orders/ORD-2026-00123" \
+curl "https://api.ujjwal.in/orders/ORD-2026-00123" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
@@ -902,7 +902,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/dashboard"
+  "https://api.ujjwal.in/admin/dashboard"
 ```
 
 **Success Response:**
@@ -967,7 +967,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/orders?status=pending&page=1&limit=20"
+  "https://api.ujjwal.in/admin/orders?status=pending&page=1&limit=20"
 ```
 
 **Success Response:**
@@ -1015,7 +1015,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/orders/123"
+  "https://api.ujjwal.in/admin/orders/123"
 ```
 
 **Success Response:**
@@ -1116,7 +1116,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/products?page=1&limit=50"
+  "https://api.ujjwal.in/admin/products?page=1&limit=50"
 ```
 
 **Success Response:**
@@ -1212,7 +1212,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/pricing"
+  "https://api.ujjwal.in/admin/pricing"
 ```
 
 **Success Response:**
@@ -1351,7 +1351,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -X POST -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/sync/products?lang=en"
+  "https://api.ujjwal.in/admin/sync/products?lang=en"
 ```
 
 **Success Response:**
@@ -1392,7 +1392,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/sync/status"
+  "https://api.ujjwal.in/admin/sync/status"
 ```
 
 **Success Response:**
@@ -1426,7 +1426,7 @@ Authorization: Bearer {admin_token}
 **Example Request:**
 ```bash
 curl -X POST -H "Authorization: Bearer {token}" \
-  "https://api.vs-mjrinfotech.com/admin/vendor/create-sales-order"
+  "https://api.ujjwal.in/admin/vendor/create-sales-order"
 ```
 
 **Success Response:**
@@ -1475,7 +1475,7 @@ async function getProducts(page = 1, categoryId = null) {
   }
 
   const response = await fetch(
-    `https://api.vs-mjrinfotech.com/products?${params}`,
+    `https://api.ujjwal.in/products?${params}`,
     {
       method: 'GET',
       headers: {
@@ -1498,7 +1498,7 @@ async function getProducts(page = 1, categoryId = null) {
 ```javascript
 async function createOrder(orderData) {
   const response = await fetch(
-    'https://api.vs-mjrinfotech.com/orders',
+    'https://api.ujjwal.in/orders',
     {
       method: 'POST',
       headers: {
@@ -1540,7 +1540,7 @@ const order = await createOrder({
 ```javascript
 async function adminLogin(username, password) {
   const response = await fetch(
-    'https://api.vs-mjrinfotech.com/admin/login',
+    'https://api.ujjwal.in/admin/login',
     {
       method: 'POST',
       headers: {
@@ -1568,7 +1568,7 @@ async function getAdminDashboard() {
   const token = localStorage.getItem('admin_token');
   
   const response = await fetch(
-    'https://api.vs-mjrinfotech.com/admin/dashboard',
+    'https://api.ujjwal.in/admin/dashboard',
     {
       method: 'GET',
       headers: {
@@ -1612,7 +1612,7 @@ function getProducts($page = 1, $categoryId = null) {
         $params['category_id'] = $categoryId;
     }
     
-    $url = 'https://api.vs-mjrinfotech.com/products?' . http_build_query($params);
+    $url = 'https://api.ujjwal.in/products?' . http_build_query($params);
     
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -1639,7 +1639,7 @@ function getProducts($page = 1, $categoryId = null) {
 ```php
 <?php
 function createOrder($orderData) {
-    $url = 'https://api.vs-mjrinfotech.com/orders';
+    $url = 'https://api.ujjwal.in/orders';
     
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -1683,7 +1683,7 @@ def get_products(page=1, category_id=None):
         params['category_id'] = category_id
     
     response = requests.get(
-        'https://api.vs-mjrinfotech.com/products',
+        'https://api.ujjwal.in/products',
         params=params,
         headers={'Content-Type': 'application/json'}
     )
@@ -1702,7 +1702,7 @@ import requests
 
 class TeleTradeAdmin:
     def __init__(self, username, password):
-        self.base_url = 'https://api.vs-mjrinfotech.com'
+        self.base_url = 'https://api.ujjwal.in'
         self.token = None
         self.login(username, password)
     
@@ -1765,7 +1765,7 @@ print(f"Total Orders: {dashboard['order_stats']['total_orders']}")
 For technical support or questions about the API:
 
 **Email:** support@teletrade.com  
-**Website:** https://api.vs-mjrinfotech.com  
+**Website:** https://api.ujjwal.in  
 **Documentation Version:** 1.0.0  
 **Last Updated:** January 7, 2026
 

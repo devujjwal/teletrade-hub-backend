@@ -3,7 +3,7 @@
  * Diagnostic Script - Check TRIEL API Response Structure
  * SECURITY: Only available in development mode
  * 
- * Usage: https://api.vs-mjrinfotech.com/check-api-response.php?key=YOUR_DEBUG_KEY
+ * Usage: https://api.ujjwal.in/check-api-response.php?key=YOUR_DEBUG_KEY
  */
 
 // Load environment first

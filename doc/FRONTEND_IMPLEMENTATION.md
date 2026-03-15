@@ -400,7 +400,7 @@ Dynamic sections refresh automatically without full page reload:
 ## Environment Variables
 
 ```env
-NEXT_PUBLIC_API_URL=https://api.vs-mjrinfotech.com
+NEXT_PUBLIC_API_URL=https://api.ujjwal.in
 ```
 
 ## Development Commands

@@ -250,7 +250,7 @@ const userLang = navigator.language.split('-')[0]; // 'en', 'de', 'fr', etc.
 // Fetch products in user's language
 async function getProducts(lang = 'en') {
   const response = await fetch(
-    `https://api.vs-mjrinfotech.com/products?lang=${lang}`
+    `https://api.ujjwal.in/products?lang=${lang}`
   );
   const data = await response.json();
   return data;
@@ -259,7 +259,7 @@ async function getProducts(lang = 'en') {
 // Get supported languages
 async function getLanguages() {
   const response = await fetch(
-    'https://api.vs-mjrinfotech.com/languages'
+    'https://api.ujjwal.in/languages'
   );
   const data = await response.json();
   return data.data.languages;
@@ -280,7 +280,7 @@ function ProductList() {
   const [language, setLanguage] = useState('en');
 
   useEffect(() => {
-    fetch(`https://api.vs-mjrinfotech.com/products?lang=${language}`)
+    fetch(`https://api.ujjwal.in/products?lang=${language}`)
       .then(res => res.json())
       .then(data => setProducts(data.data.products));
   }, [language]);
@@ -319,14 +319,14 @@ Add to your admin panel:
 <script>
 async function syncAllLanguages() {
   window.open(
-    'https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345',
+    'https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345',
     '_blank'
   );
 }
 
 async function syncLanguage(langId) {
   window.open(
-    `https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345&languages=${langId}`,
+    `https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345&languages=${langId}`,
     '_blank'
   );
 }
@@ -339,30 +339,30 @@ async function syncLanguage(langId) {
 
 ```bash
 # Test English
-curl "https://api.vs-mjrinfotech.com/products?lang=en"
+curl "https://api.ujjwal.in/products?lang=en"
 
 # Test German
-curl "https://api.vs-mjrinfotech.com/products?lang=de"
+curl "https://api.ujjwal.in/products?lang=de"
 
 # Test French with ID
-curl "https://api.vs-mjrinfotech.com/products?lang=4"
+curl "https://api.ujjwal.in/products?lang=4"
 
 # Test with Accept-Language header
 curl -H "Accept-Language: de-DE,de;q=0.9" \
-  "https://api.vs-mjrinfotech.com/products"
+  "https://api.ujjwal.in/products"
 
 # Get supported languages
-curl "https://api.vs-mjrinfotech.com/languages"
+curl "https://api.ujjwal.in/languages"
 ```
 
 ### Test Product Sync
 
 ```bash
 # Sync all languages
-curl "https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345"
+curl "https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345"
 
 # Sync specific languages
-curl "https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345&languages=1,3,4"
+curl "https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345&languages=1,3,4"
 ```
 
 ## Performance Considerations
@@ -401,7 +401,7 @@ Set up automatic syncs using cron:
 
 ```bash
 # Sync all languages daily at 2 AM
-0 2 * * * curl -s "https://api.vs-mjrinfotech.com/sync-products.php?key=SECURE_KEY_12345" > /dev/null
+0 2 * * * curl -s "https://api.ujjwal.in/sync-products.php?key=SECURE_KEY_12345" > /dev/null
 ```
 
 ## Troubleshooting

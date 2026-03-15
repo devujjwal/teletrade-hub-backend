@@ -3,7 +3,7 @@
  * Debug Products - Show actual database content
  * SECURITY: Only available in development mode
  * 
- * Usage: https://api.vs-mjrinfotech.com/debug-products.php?key=YOUR_DEBUG_KEY
+ * Usage: https://api.ujjwal.in/debug-products.php?key=YOUR_DEBUG_KEY
  */
 
 // Load environment first

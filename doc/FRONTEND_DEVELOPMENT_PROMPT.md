@@ -2,10 +2,10 @@
 
 ## Project Overview
 
-Develop a complete, production-ready e-commerce frontend for **TeleTrade Hub** using Next.js. The frontend should match the design from `https://github.com/devujjwal/bright-grid-shop.git` and integrate seamlessly with the existing backend API at `https://api.vs-mjrinfotech.com`.
+Develop a complete, production-ready e-commerce frontend for **TeleTrade Hub** using Next.js. The frontend should match the design from `https://github.com/devujjwal/bright-grid-shop.git` and integrate seamlessly with the existing backend API at `https://api.ujjwal.in`.
 
 **Owner:** Telecommunication Trading e.K.  
-**Backend API:** https://api.vs-mjrinfotech.com  
+**Backend API:** https://api.ujjwal.in  
 **Design Reference:** https://github.com/devujjwal/bright-grid-shop.git
 
 ---
@@ -605,7 +605,7 @@ function getProxiedImageUrl(originalUrl: string): string {
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.vs-mjrinfotech.com',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://api.ujjwal.in',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -797,7 +797,7 @@ Create `.env.local`:
 
 ```env
 # API Configuration
-NEXT_PUBLIC_API_URL=https://api.vs-mjrinfotech.com
+NEXT_PUBLIC_API_URL=https://api.ujjwal.in
 
 # Image Proxy Configuration
 NEXT_PUBLIC_IMAGE_PROXY_ENABLED=true

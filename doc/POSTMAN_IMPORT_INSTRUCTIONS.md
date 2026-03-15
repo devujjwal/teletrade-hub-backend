@@ -2,7 +2,7 @@
 
 ## ✅ What Has Been Created
 
-I've created a complete Postman collection with **29 API endpoints** organized and ready to test with your base URL: `https://api.vs-mjrinfotech.com`
+I've created a complete Postman collection with **29 API endpoints** organized and ready to test with your base URL: `https://api.ujjwal.in`
 
 ### 📁 Files Created
 
@@ -39,7 +39,7 @@ Launch your Postman application
 3. Click **"Import"**
 
 ### Step 3: Start Testing!
-✅ Collection is ready with base URL: `https://api.vs-mjrinfotech.com`
+✅ Collection is ready with base URL: `https://api.ujjwal.in`
 
 ---
 
@@ -72,7 +72,7 @@ Launch your Postman application
 - No manual copy/paste needed!
 
 ### 2. **Pre-configured Base URL**
-- Already set to: `https://api.vs-mjrinfotech.com`
+- Already set to: `https://api.ujjwal.in`
 - Change once in collection variables if needed
 
 ### 3. **Sample Data Included**
@@ -171,7 +171,7 @@ Access via: Collection → Variables tab
 Create different environments for:
 - Development: `http://localhost:8000`
 - Staging: `https://staging.api.example.com`
-- Production: `https://api.vs-mjrinfotech.com`
+- Production: `https://api.ujjwal.in`
 
 ### Tip 3: Test Scripts
 The Admin Login already has a test script. Add more for:
@@ -325,7 +325,7 @@ GET /products?
 
 ### Problem: 404 Not Found
 **Solution:**
-1. Check base URL is correct: `https://api.vs-mjrinfotech.com`
+1. Check base URL is correct: `https://api.ujjwal.in`
 2. Verify endpoint path (no extra slashes)
 3. For parameterized routes, replace `{id}` with actual ID
 
@@ -383,14 +383,14 @@ Before you start, verify:
 
 - [ ] Postman installed and running
 - [ ] Collection file located: `TeleTrade_Hub_API_Collection.postman_collection.json`
-- [ ] API is accessible: `https://api.vs-mjrinfotech.com`
+- [ ] API is accessible: `https://api.ujjwal.in`
 - [ ] Admin credentials available
 - [ ] Ready to test!
 
 After import, verify:
 
 - [ ] Collection appears in Postman
-- [ ] Base URL is correct (`https://api.vs-mjrinfotech.com`)
+- [ ] Base URL is correct (`https://api.ujjwal.in`)
 - [ ] All 29 endpoints visible
 - [ ] Folder structure organized
 - [ ] Health check works: `GET /health`
@@ -425,7 +425,7 @@ File Location:
 
 **Happy Testing! 🎉**
 
-Base URL: `https://api.vs-mjrinfotech.com`  
+Base URL: `https://api.ujjwal.in`  
 Version: 1.0.0  
 Total Endpoints: 29  
 Owner: Telecommunication Trading e.K.

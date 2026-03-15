@@ -25,7 +25,7 @@ The collection comes with pre-configured variables:
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
-| `base_url` | `https://api.vs-mjrinfotech.com` | API base URL |
+| `base_url` | `https://api.ujjwal.in` | API base URL |
 | `admin_token` | (empty) | Auto-populated after admin login |
 
 ### Changing Base URL (if needed)
@@ -261,7 +261,7 @@ Add the `lang` query parameter to product/category requests.
 
 For API issues or questions:
 - **Email:** support@teletrade.com
-- **API Status:** https://api.vs-mjrinfotech.com/health
+- **API Status:** https://api.ujjwal.in/health
 - **Documentation:** See API_DOCUMENTATION.md
 
 ---
@@ -269,7 +269,7 @@ For API issues or questions:
 ## 🎉 You're All Set!
 
 Your Postman collection is ready to use with:
-- ✅ **Base URL:** https://api.vs-mjrinfotech.com
+- ✅ **Base URL:** https://api.ujjwal.in
 - ✅ **40+ Pre-configured endpoints**
 - ✅ **Sample request bodies**
 - ✅ **Auto-authentication for admin**

@@ -1,6 +1,6 @@
 # TeleTrade Hub API - Quick Reference
 
-**Base URL:** `https://api.vs-mjrinfotech.com`
+**Base URL:** `https://api.ujjwal.in`
 
 ## 📋 All Endpoints Summary
 
@@ -122,35 +122,35 @@ All endpoints marked with "✅ Admin" require this header.
 
 ### 1. Check API Health
 ```bash
-curl https://api.vs-mjrinfotech.com/health
+curl https://api.ujjwal.in/health
 ```
 
 ### 2. Get Products
 ```bash
-curl "https://api.vs-mjrinfotech.com/products?lang=en&page=1&limit=20"
+curl "https://api.ujjwal.in/products?lang=en&page=1&limit=20"
 ```
 
 ### 3. Search Products
 ```bash
-curl "https://api.vs-mjrinfotech.com/products/search?q=iPhone"
+curl "https://api.ujjwal.in/products/search?q=iPhone"
 ```
 
 ### 4. Admin Login
 ```bash
-curl -X POST https://api.vs-mjrinfotech.com/admin/login \
+curl -X POST https://api.ujjwal.in/admin/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"your_password"}'
 ```
 
 ### 5. Get Dashboard (with token)
 ```bash
-curl https://api.vs-mjrinfotech.com/admin/dashboard \
+curl https://api.ujjwal.in/admin/dashboard \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
 ### 6. Create Order
 ```bash
-curl -X POST https://api.vs-mjrinfotech.com/orders \
+curl -X POST https://api.ujjwal.in/orders \
   -H "Content-Type: application/json" \
   -d '{
     "guest_email": "customer@example.com",
@@ -287,7 +287,7 @@ Add `?lang=de` to any product/category endpoint for German content.
 ## 🎯 Testing in Postman
 
 1. **Import Collection:** `TeleTrade_Hub_API_Collection.postman_collection.json`
-2. **Set Base URL:** Already configured as `https://api.vs-mjrinfotech.com`
+2. **Set Base URL:** Already configured as `https://api.ujjwal.in`
 3. **Test Health:** Start with `GET /health`
 4. **Admin Login:** Use `POST /admin/login` (token auto-saves)
 5. **Explore:** All endpoints are ready with sample data!

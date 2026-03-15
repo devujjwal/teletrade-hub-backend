@@ -2,13 +2,13 @@
 	"info": {
 		"_postman_id": "teletrade-hub-api-v1",
 		"name": "TeleTrade Hub API",
-		"description": "Complete API collection for TeleTrade Hub - Telecommunication Trading e.K.\n\nBase URL: https://api.vs-mjrinfotech.com\nVersion: 1.0.1\nLast Updated: January 7, 2026",
+		"description": "Complete API collection for TeleTrade Hub - Telecommunication Trading e.K.\n\nBase URL: https://api.ujjwal.in\nVersion: 1.0.1\nLast Updated: January 7, 2026",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "https://api.vs-mjrinfotech.com",
+			"value": "https://api.ujjwal.in",
 			"type": "string"
 		},
 		{

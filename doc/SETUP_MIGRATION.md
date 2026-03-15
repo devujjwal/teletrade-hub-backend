@@ -5,7 +5,7 @@
 ### Step 1: Create user_sessions Table
 Visit in your browser:
 ```
-https://api.vs-mjrinfotech.com/setup/create-user-sessions-table
+https://api.ujjwal.in/setup/create-user-sessions-table
 ```
 
 Expected response:
@@ -19,7 +19,7 @@ Expected response:
 ### Step 2: Update addresses Table
 Visit in your browser:
 ```
-https://api.vs-mjrinfotech.com/setup/update-addresses-table
+https://api.ujjwal.in/setup/update-addresses-table
 ```
 
 Expected response:
@@ -43,18 +43,18 @@ Expected response:
 ### Step 3: Debug Authentication (Optional)
 To check if your token is valid, visit with Authorization header:
 ```
-https://api.vs-mjrinfotech.com/setup/debug-auth
+https://api.ujjwal.in/setup/debug-auth
 ```
 
 **Using curl:**
 ```bash
-curl -X GET https://api.vs-mjrinfotech.com/setup/debug-auth \
+curl -X GET https://api.ujjwal.in/setup/debug-auth \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
 **Using browser console:**
 ```javascript
-fetch('https://api.vs-mjrinfotech.com/setup/debug-auth', {
+fetch('https://api.ujjwal.in/setup/debug-auth', {
   headers: {
     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
   }

@@ -104,4 +104,4 @@ echo "git fetch origin\n";
 echo "git reset --hard origin/main\n";
 echo "php -r 'if(function_exists(\"opcache_reset\")) opcache_reset();'\n";
 echo "touch public/index.php\n\n";
-echo "Then check again: https://api.vs-mjrinfotech.com/check-code-version.php\n";
+echo "Then check again: https://api.ujjwal.in/check-code-version.php\n";

@@ -3,7 +3,7 @@
  * Product Sync Script
  * SECURITY: Requires secure key from environment
  * 
- * Usage: https://api.vs-mjrinfotech.com/sync-products.php?key=YOUR_SYNC_KEY
+ * Usage: https://api.ujjwal.in/sync-products.php?key=YOUR_SYNC_KEY
  */
 
 // Load environment first
