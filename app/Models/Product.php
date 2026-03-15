@@ -289,6 +289,8 @@ class Product
      */
     public function create($data)
     {
+        $this->synchronizePostgresSequence('products', 'id');
+
         $sql = "INSERT INTO products (
             product_source, vendor_article_id, sku, ean, name, 
             name_en, name_de, name_sk, name_fr, name_es, name_ru, name_it, name_tr, name_ro, name_pl,
@@ -308,6 +310,12 @@ class Product
             :is_available, :is_featured, :weight, :dimensions,
             :color, :storage, :ram, :specifications, :meta_title, :meta_description, :slug, :last_synced_at
         )";
+
+        if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            $stmt = $this->db->prepare($sql . ' RETURNING id');
+            $stmt->execute($data);
+            return (int) $stmt->fetchColumn();
+        }
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($data);
@@ -411,6 +419,8 @@ class Product
      */
     public function addImage($productId, $imageUrl, $altText = null, $isPrimary = false)
     {
+        $this->synchronizePostgresSequence('product_images', 'id');
+
         $sql = "INSERT INTO product_images (product_id, image_url, alt_text, is_primary)
                 VALUES (:product_id, :image_url, :alt_text, :is_primary)";
         
@@ -421,6 +431,37 @@ class Product
             ':alt_text' => $altText,
             ':is_primary' => $isPrimary ? 1 : 0
         ]);
+    }
+
+    /**
+     * PostgreSQL imports can leave serial sequences behind table data.
+     * Realign them before inserts so sync jobs do not collide on primary keys.
+     */
+    private function synchronizePostgresSequence($table, $column)
+    {
+        if ($this->db->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'pgsql') {
+            return;
+        }
+
+        $sequenceStmt = $this->db->prepare('SELECT pg_get_serial_sequence(:table_name, :column_name)');
+        $sequenceStmt->execute([
+            ':table_name' => $table,
+            ':column_name' => $column,
+        ]);
+
+        $sequenceName = $sequenceStmt->fetchColumn();
+        if (!$sequenceName) {
+            return;
+        }
+
+        $sql = sprintf(
+            "SELECT setval(%s, COALESCE((SELECT MAX(%s) FROM %s), 0) + 1, false)",
+            $this->db->quote($sequenceName),
+            $column,
+            $table
+        );
+
+        $this->db->exec($sql);
     }
 
     /**
