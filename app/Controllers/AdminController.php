@@ -1794,6 +1794,21 @@ class AdminController
     }
 
     /**
+     * Get notification system health (admin only)
+     */
+    public function getNotificationHealth()
+    {
+        $this->authMiddleware->verifyAdmin();
+
+        try {
+            $health = $this->getEmailNotifications()->getAdminNotificationHealth();
+            Response::success($health);
+        } catch (Exception $e) {
+            Response::error('Failed to load notification health: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Get public settings (no auth required - returns only public fields)
      */
     public function getPublicSettings()

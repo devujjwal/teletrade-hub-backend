@@ -240,6 +240,7 @@ $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSales
 
 // Admin Settings
 $router->get('admin/settings', 'AdminController', 'getSettings');
+$router->get('admin/settings/notification-health', 'AdminController', 'getNotificationHealth');
 $router->put('admin/settings', 'AdminController', 'updateSettings');
 
 // Admin Shipping
