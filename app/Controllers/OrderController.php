@@ -166,6 +166,21 @@ class OrderController
                 $this->emailNotifications->sendOrderPlaced($user['email']);
             }
 
+            // Dispatch admin notification independently so customer flow is never blocked.
+            $orderForAdminEmail = $this->orderService->getOrderDetails((int) $result['order_id'], true);
+            if (is_array($orderForAdminEmail)) {
+                register_shutdown_function(function () use ($orderForAdminEmail) {
+                    try {
+                        $service = new EmailNotificationService();
+                        $service->sendAdminOrderPlacedNotification($orderForAdminEmail);
+                    } catch (Throwable $e) {
+                        error_log('Admin order notification failed: ' . $e->getMessage());
+                    }
+                });
+            } else {
+                error_log('Admin order notification skipped: order payload could not be generated');
+            }
+
             Response::success($result, 'Order created successfully', 201);
         } catch (Exception $e) {
             Response::error($e->getMessage(), 400);

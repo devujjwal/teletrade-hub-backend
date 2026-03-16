@@ -200,6 +200,41 @@ class AuthController
             $this->attachSignedRegistrationDocumentUrls($user);
             $this->emailNotifications->sendAccountCreated($user['email']);
 
+            // Dispatch admin notification independently so customer flow is never blocked.
+            $adminPayload = [
+                'id' => $user['id'] ?? null,
+                'account_type' => $user['account_type'] ?? ($input['account_type'] ?? 'customer'),
+                'first_name' => $user['first_name'] ?? ($input['first_name'] ?? ''),
+                'last_name' => $user['last_name'] ?? ($input['last_name'] ?? ''),
+                'email' => $user['email'] ?? ($input['email'] ?? ''),
+                'phone' => $user['phone'] ?? ($input['phone'] ?? ''),
+                'mobile' => $user['mobile'] ?? ($input['mobile'] ?? ''),
+                'address' => $user['address'] ?? ($input['address'] ?? ''),
+                'postal_code' => $user['postal_code'] ?? ($input['postal_code'] ?? ''),
+                'city' => $user['city'] ?? ($input['city'] ?? ''),
+                'country' => $user['country'] ?? ($input['country'] ?? ''),
+                'tax_number' => $user['tax_number'] ?? ($input['tax_number'] ?? ''),
+                'vat_number' => $user['vat_number'] ?? ($input['vat_number'] ?? ''),
+                'delivery_address' => $user['delivery_address'] ?? ($input['delivery_address'] ?? ''),
+                'delivery_postal_code' => $user['delivery_postal_code'] ?? ($input['delivery_postal_code'] ?? ''),
+                'delivery_city' => $user['delivery_city'] ?? ($input['delivery_city'] ?? ''),
+                'delivery_country' => $user['delivery_country'] ?? ($input['delivery_country'] ?? ''),
+                'account_holder' => $user['account_holder'] ?? ($input['account_holder'] ?? ''),
+                'bank_name' => $user['bank_name'] ?? ($input['bank_name'] ?? ''),
+                'iban' => $user['iban'] ?? ($input['iban'] ?? ''),
+                'bic' => $user['bic'] ?? ($input['bic'] ?? ''),
+                'created_at' => $user['created_at'] ?? date('c')
+            ];
+
+            register_shutdown_function(function () use ($adminPayload) {
+                try {
+                    $service = new EmailNotificationService();
+                    $service->sendAdminRegistrationNotification($adminPayload);
+                } catch (Throwable $e) {
+                    error_log('Admin registration notification failed: ' . $e->getMessage());
+                }
+            });
+
             // Remove password hash from response
             unset($user['password_hash']);
 
