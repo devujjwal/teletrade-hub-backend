@@ -48,7 +48,7 @@ class SmtpMailerService
             && $this->fromEmail !== '';
     }
 
-    public function send($toEmail, $subject, $message)
+    public function send($toEmail, $subject, $message, $isHtml = false, $plainTextAlternative = null)
     {
         if (!$this->isConfigured()) {
             throw new Exception('SMTP is not configured');
@@ -97,11 +97,36 @@ class SmtpMailerService
                 'To: ' . $this->formatAddress($toEmail, $toEmail),
                 'Subject: ' . $this->encodeHeader($subject),
                 'MIME-Version: 1.0',
-                'Content-Type: text/plain; charset=UTF-8',
-                'Content-Transfer-Encoding: 8bit'
             ];
 
-            $body = implode("\r\n", $headers) . "\r\n\r\n" . $this->escapeBody($message) . "\r\n.";
+            if ($isHtml) {
+                $boundary = 'teletrade_alt_' . bin2hex(random_bytes(12));
+                $plainText = (string) ($plainTextAlternative ?? strip_tags((string) $message));
+                $htmlBody = (string) $message;
+
+                $headers[] = 'Content-Type: multipart/alternative; boundary="' . $boundary . '"';
+
+                $multipartBody = implode("\r\n", [
+                    '--' . $boundary,
+                    'Content-Type: text/plain; charset=UTF-8',
+                    'Content-Transfer-Encoding: 8bit',
+                    '',
+                    $plainText,
+                    '--' . $boundary,
+                    'Content-Type: text/html; charset=UTF-8',
+                    'Content-Transfer-Encoding: 8bit',
+                    '',
+                    $htmlBody,
+                    '--' . $boundary . '--',
+                ]);
+
+                $body = implode("\r\n", $headers) . "\r\n\r\n" . $this->escapeBody($multipartBody) . "\r\n.";
+            } else {
+                $headers[] = 'Content-Type: text/plain; charset=UTF-8';
+                $headers[] = 'Content-Transfer-Encoding: 8bit';
+                $body = implode("\r\n", $headers) . "\r\n\r\n" . $this->escapeBody($message) . "\r\n.";
+            }
+
             $this->command($socket, $body, [250]);
             $this->command($socket, 'QUIT', [221]);
         } finally {
