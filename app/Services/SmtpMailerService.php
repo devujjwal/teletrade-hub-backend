@@ -17,11 +17,24 @@ class SmtpMailerService
 
     public function __construct()
     {
-        $this->host = (string) Env::get('SMTP_HOST', '');
-        $this->port = (int) Env::get('SMTP_PORT', 587);
-        $this->username = (string) Env::get('SMTP_USER', '');
-        $this->password = (string) Env::get('SMTP_PASSWORD', '');
-        $this->fromEmail = (string) Env::get('SMTP_FROM_EMAIL', '');
+        $googleEmail = (string) Env::get('GOOGLE_APP_EMAIL', '');
+        $googlePassword = (string) Env::get('GOOGLE_APP_PASSWORD', '');
+        $useGoogleAppSmtp = $googleEmail !== '' && $googlePassword !== '';
+
+        if ($useGoogleAppSmtp) {
+            $this->host = 'smtp.gmail.com';
+            $this->port = 587;
+            $this->username = $googleEmail;
+            $this->password = $googlePassword;
+            $this->fromEmail = (string) Env::get('SMTP_FROM_EMAIL', $googleEmail);
+        } else {
+            $this->host = (string) Env::get('SMTP_HOST', '');
+            $this->port = (int) Env::get('SMTP_PORT', 587);
+            $this->username = (string) Env::get('SMTP_USER', '');
+            $this->password = (string) Env::get('SMTP_PASSWORD', '');
+            $this->fromEmail = (string) Env::get('SMTP_FROM_EMAIL', '');
+        }
+
         $this->fromName = (string) Env::get('SMTP_FROM_NAME', 'TeleTrade Hub');
         $this->timeout = 15;
     }
