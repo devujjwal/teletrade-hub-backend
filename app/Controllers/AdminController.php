@@ -734,6 +734,109 @@ class AdminController
     }
 
     /**
+     * Set a user password from admin panel.
+     */
+    public function updateUserPassword($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        $errors = Validator::validate($input, [
+            'new_password' => 'required|min:8|strong_password',
+            'confirm_password' => 'required',
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        $newPassword = (string) ($input['new_password'] ?? '');
+        $confirmPassword = (string) ($input['confirm_password'] ?? '');
+        $sendNotificationEmail = !empty($input['send_notification_email']);
+        if ($newPassword !== $confirmPassword) {
+            Response::error('New passwords do not match', 400);
+        }
+
+        $userId = (int) $id;
+        if ($userId <= 0) {
+            Response::error('Invalid user id', 400);
+        }
+
+        try {
+            $userStmt = $this->db->prepare("SELECT id, email FROM users WHERE id = :id");
+            $userStmt->execute([':id' => $userId]);
+            $user = $userStmt->fetch();
+
+            if (!$user) {
+                Response::notFound('User not found');
+            }
+
+            $newPasswordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+
+            $this->db->beginTransaction();
+
+            $updateStmt = $this->db->prepare("UPDATE users SET password_hash = :password_hash, updated_at = NOW() WHERE id = :id");
+            $updateStmt->execute([
+                ':password_hash' => $newPasswordHash,
+                ':id' => $userId,
+            ]);
+
+            // Revoke active sessions and any pending reset tokens so only the new password works.
+            try {
+                $this->db->prepare("DELETE FROM user_sessions WHERE user_id = :user_id")->execute([
+                    ':user_id' => $userId,
+                ]);
+            } catch (Exception $e) {
+                error_log('Failed to revoke user sessions after admin password update: ' . $e->getMessage());
+            }
+
+            try {
+                $this->db->prepare("DELETE FROM password_reset_tokens WHERE user_id = :user_id")->execute([
+                    ':user_id' => $userId,
+                ]);
+            } catch (Exception $e) {
+                error_log('Failed to clear reset tokens after admin password update: ' . $e->getMessage());
+            }
+
+            $this->db->commit();
+
+            $adminIdentifier = $admin['username'] ?? ('admin_id:' . ($admin['id'] ?? 'unknown'));
+            error_log("AUDIT: Admin {$adminIdentifier} updated password for user {$userId}");
+
+            $emailSent = false;
+            if ($sendNotificationEmail && !empty($user['email'])) {
+                try {
+                    $emailSent = (bool) $this->getEmailNotifications()->sendAdminSetPasswordNotification(
+                        $user['email'],
+                        $newPassword
+                    );
+                } catch (Exception $e) {
+                    error_log('Failed to send admin password notification email: ' . $e->getMessage());
+                    $emailSent = false;
+                }
+            }
+
+            Response::success([
+                'user_id' => $userId,
+                'email' => $user['email'] ?? null,
+                'notification_email_requested' => $sendNotificationEmail,
+                'notification_email_sent' => $emailSent,
+            ], 'User password updated successfully');
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            error_log('Admin update user password failed: ' . $e->getMessage());
+            Response::error('Failed to update user password', 500);
+        }
+    }
+
+    /**
      * Get order detail (admin view - includes internal fields)
      */
     public function orderDetail($id)
@@ -1823,6 +1926,10 @@ class AdminController
                 'address' => $allSettings['address'] ?? '',
                 'contact_number' => $allSettings['contact_number'] ?? '',
                 'whatsapp_number' => $allSettings['whatsapp_number'] ?? '',
+                'facebook_url' => $allSettings['facebook_url'] ?? '',
+                'twitter_url' => $allSettings['twitter_url'] ?? '',
+                'instagram_url' => $allSettings['instagram_url'] ?? '',
+                'youtube_url' => $allSettings['youtube_url'] ?? '',
                 'bank_name' => $allSettings['bank_name'] ?? '',
                 'account_holder' => $allSettings['account_holder'] ?? '',
                 'iban' => $allSettings['iban'] ?? '',

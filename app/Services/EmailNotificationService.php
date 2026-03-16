@@ -73,6 +73,22 @@ class EmailNotificationService
         return $this->send($email, $subject, $body);
     }
 
+    public function sendAdminSetPasswordNotification($email, $temporaryPassword)
+    {
+        $subject = 'Your Password Was Reset by Admin – TeleTrade Hub';
+        $body = implode("\n", [
+            'Your TeleTrade Hub account password has been reset by our admin team.',
+            '',
+            'Temporary password:',
+            $temporaryPassword,
+            '',
+            'Please login and change your password immediately from your account settings.',
+            'If you did not request this, contact support right away.',
+        ]);
+
+        return $this->send($email, $subject, $body);
+    }
+
     public function sendOrderStatusChanged($email, $orderNumber, $status)
     {
         $statusMap = [

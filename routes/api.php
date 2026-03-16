@@ -209,6 +209,7 @@ $router->post('admin/orders/{id}/invoice', 'AdminController', 'uploadOrderInvoic
 // Admin Users
 $router->get('admin/users', 'AdminController', 'users');
 $router->put('admin/users/{id}/approval', 'AdminController', 'updateUserApproval');
+$router->put('admin/users/{id}/password', 'AdminController', 'updateUserPassword');
 
 // Admin Products
 $router->get('admin/products', 'AdminController', 'products');
