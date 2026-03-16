@@ -46,6 +46,7 @@ class Database
                         $username = $parts['user'] ?? Env::get('DB_USER', Env::get('DB_USERNAME', 'postgres'));
                         $password = $parts['pass'] ?? Env::get('DB_PASSWORD', '');
                         $sslmode = $parts['sslmode'] ?? Env::get('DB_SSLMODE', '');
+                        $gssencmode = $parts['gssencmode'] ?? Env::get('DB_GSSENCMODE', '');
                     } else {
                         $host = Env::get('DB_HOST', 'localhost');
                         $port = intval(Env::get('DB_PORT', 5432));
@@ -53,9 +54,10 @@ class Database
                         $username = Env::get('DB_USER', Env::get('DB_USERNAME', 'postgres'));
                         $password = Env::get('DB_PASSWORD', '');
                         $sslmode = Env::get('DB_SSLMODE', '');
+                        $gssencmode = Env::get('DB_GSSENCMODE', '');
                     }
 
-                    $connectionAttempts = self::buildPostgresConnectionAttempts($host, $port, $dbname, $sslmode);
+                    $connectionAttempts = self::buildPostgresConnectionAttempts($host, $port, $dbname, $sslmode, $gssencmode);
                     $lastException = null;
 
                     foreach ($connectionAttempts as $attempt) {
@@ -63,7 +65,8 @@ class Database
                             $attempt['host'],
                             $attempt['port'],
                             $attempt['dbname'],
-                            $attempt['sslmode']
+                            $attempt['sslmode'],
+                            $attempt['gssencmode']
                         );
 
                         try {
@@ -217,17 +220,19 @@ class Database
             'dbname' => $dbname !== '' ? $dbname : null,
             'user' => $user !== null ? urldecode($user) : null,
             'pass' => $pass !== null ? urldecode($pass) : null,
-            'sslmode' => isset($queryParams['sslmode']) ? (string)$queryParams['sslmode'] : null
+            'sslmode' => isset($queryParams['sslmode']) ? (string)$queryParams['sslmode'] : null,
+            'gssencmode' => isset($queryParams['gssencmode']) ? (string)$queryParams['gssencmode'] : null
         ];
     }
 
-    private static function buildPostgresConnectionAttempts($host, $port, $dbname, $sslmode)
+    private static function buildPostgresConnectionAttempts($host, $port, $dbname, $sslmode, $gssencmode)
     {
         $attempts = [[
             'host' => $host,
             'port' => $port,
             'dbname' => $dbname,
-            'sslmode' => self::normalizeSslmode($host, $sslmode)
+            'sslmode' => self::normalizeSslmode($host, $sslmode),
+            'gssencmode' => self::normalizeGssencmode($host, $gssencmode)
         ]];
 
         // Shared hosting commonly cannot reach transaction pooler on 6543 but can reach session pooler on 5432.
@@ -236,18 +241,22 @@ class Database
                 'host' => $host,
                 'port' => 5432,
                 'dbname' => $dbname,
-                'sslmode' => self::normalizeSslmode($host, $sslmode)
+                'sslmode' => self::normalizeSslmode($host, $sslmode),
+                'gssencmode' => self::normalizeGssencmode($host, $gssencmode)
             ];
         }
 
         return $attempts;
     }
 
-    private static function buildPostgresDsn($host, $port, $dbname, $sslmode)
+    private static function buildPostgresDsn($host, $port, $dbname, $sslmode, $gssencmode)
     {
         $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
         if (!empty($sslmode)) {
             $dsn .= ";sslmode={$sslmode}";
+        }
+        if (!empty($gssencmode)) {
+            $dsn .= ";gssencmode={$gssencmode}";
         }
         return $dsn;
     }
@@ -268,5 +277,18 @@ class Database
     private static function isSupabasePoolerHost($host)
     {
         return is_string($host) && strpos($host, '.pooler.supabase.com') !== false;
+    }
+
+    private static function normalizeGssencmode($host, $gssencmode)
+    {
+        if (!empty($gssencmode)) {
+            return $gssencmode;
+        }
+
+        if (self::isSupabasePoolerHost($host)) {
+            return 'disable';
+        }
+
+        return '';
     }
 }
