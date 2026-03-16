@@ -256,14 +256,10 @@ CREATE TABLE IF NOT EXISTS `admin_users` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Create default admin user (password: Admin@123456)
--- Default admin credentials:
--- Username: admin
--- Password: Ujjwal@2026
--- Note: Password hash below is for 'Ujjwal@2026'
--- To regenerate: php public/generate-password-hash.php
+-- Create bootstrap admin user in disabled state.
+-- IMPORTANT: Replace email/password_hash and set is_active=1 manually during secure deployment.
 INSERT INTO `admin_users` (`username`, `email`, `password_hash`, `full_name`, `role`, `is_active`)
-VALUES ('admin', 'tctradingek@gmail.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'super_admin', 1)
+VALUES ('admin', 'admin@example.com', '$2y$10$jMKzMF9R7Op9W1iGGw0AW.26sqsxAqWnW8JQx1YriM3n0f4A3e10G', 'System Administrator', 'super_admin', 0)
 ON DUPLICATE KEY UPDATE `username` = `username`;
 
 -- Admin Sessions

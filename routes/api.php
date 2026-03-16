@@ -145,10 +145,6 @@ $router = new Router();
 $router->get('', 'HealthController', 'index');
 $router->get('health', 'HealthController', 'check');
 
-// Database setup/migration endpoints (remove after setup)
-$router->get('setup/create-user-sessions-table', 'HealthController', 'createUserSessionsTable');
-$router->get('setup/update-addresses-table', 'HealthController', 'updateAddressesTable');
-$router->get('setup/debug-auth', 'HealthController', 'debugAuth');
 
 // Languages
 $router->get('languages', 'ProductController', 'languages');
@@ -252,9 +248,5 @@ $router->post('admin/shipping/orders/{orderId}/tracking', 'ShippingController', 
 // Admin Password Management
 $router->put('admin/change-password', 'AdminController', 'changePassword');
 $router->post('admin/reset-password', 'AdminController', 'resetPasswordToDefault');
-
-// Debug Routes (Temporary - Remove in production)
-$router->get('admin/debug/database', 'AdminController', 'debugDatabase');
-$router->get('admin/debug/vendor-api', 'AdminController', 'debugVendorApi');
 
 return $router;

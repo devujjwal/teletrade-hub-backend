@@ -1902,15 +1902,41 @@ class AdminController
     }
 
     /**
-     * Reset admin password to default (Ujjwal@2026)
+     * Build a strong temporary password for emergency resets.
+     */
+    private function generateTemporaryPassword($length = 16)
+    {
+        $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        $lower = 'abcdefghijkmnopqrstuvwxyz';
+        $digits = '23456789';
+        $special = '!@#$%^&*()-_=+';
+        $all = $upper . $lower . $digits . $special;
+
+        $password = [
+            $upper[random_int(0, strlen($upper) - 1)],
+            $lower[random_int(0, strlen($lower) - 1)],
+            $digits[random_int(0, strlen($digits) - 1)],
+            $special[random_int(0, strlen($special) - 1)]
+        ];
+
+        for ($i = count($password); $i < $length; $i++) {
+            $password[] = $all[random_int(0, strlen($all) - 1)];
+        }
+
+        shuffle($password);
+        return implode('', $password);
+    }
+
+    /**
+     * Reset admin password to a temporary generated password.
      */
     public function resetPasswordToDefault()
     {
         $admin = $this->authMiddleware->verifyAdmin();
         
         try {
-            $defaultPassword = 'Ujjwal@2026';
-            $passwordHash = password_hash($defaultPassword, PASSWORD_BCRYPT);
+            $temporaryPassword = $this->generateTemporaryPassword();
+            $passwordHash = password_hash($temporaryPassword, PASSWORD_BCRYPT);
             
             $stmt = $this->db->prepare("UPDATE admin_users SET password_hash = :password_hash WHERE id = :id");
             $stmt->execute([
@@ -1918,7 +1944,9 @@ class AdminController
                 ':id' => $admin['id']
             ]);
 
-            Response::success(null, 'Password reset to default successfully');
+            Response::success([
+                'temporary_password' => $temporaryPassword
+            ], 'Password reset successfully. Save this temporary password now.');
         } catch (Exception $e) {
             error_log("Reset password error: " . $e->getMessage());
             Response::error('Failed to reset password: ' . $e->getMessage(), 500);
