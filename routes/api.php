@@ -179,6 +179,9 @@ $router->get('shipping/orders/{orderId}/tracking', 'ShippingController', 'getOrd
 // Auth (Customer)
 $router->post('auth/register', 'AuthController', 'register');
 $router->post('auth/login', 'AuthController', 'login');
+$router->post('auth/forgot-password', 'AuthController', 'forgotPassword');
+$router->post('auth/reset-password/verify', 'AuthController', 'verifyResetPasswordToken');
+$router->post('auth/reset-password', 'AuthController', 'resetPassword');
 $router->post('auth/logout', 'AuthController', 'logout');
 $router->get('auth/me', 'AuthController', 'me');
 $router->put('auth/profile', 'AuthController', 'updateProfile');

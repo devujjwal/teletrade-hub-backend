@@ -55,6 +55,24 @@ class EmailNotificationService
         );
     }
 
+    public function sendPasswordResetLink($email, $resetUrl, $expiryMinutes)
+    {
+        $minutes = max(1, (int)$expiryMinutes);
+        $subject = 'Reset Your Password – TeleTrade Hub';
+        $body = implode("\n", [
+            'We received a request to reset your TeleTrade Hub account password.',
+            '',
+            'Use the link below to choose a new password:',
+            $resetUrl,
+            '',
+            'This link will expire in ' . $minutes . ' minutes and can only be used once.',
+            '',
+            'If you did not request this reset, you can safely ignore this email.',
+        ]);
+
+        return $this->send($email, $subject, $body);
+    }
+
     public function sendOrderStatusChanged($email, $orderNumber, $status)
     {
         $statusMap = [

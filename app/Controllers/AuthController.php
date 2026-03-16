@@ -11,6 +11,7 @@ require_once __DIR__ . '/../Services/EmailNotificationService.php';
  */
 class AuthController
 {
+    private const FORGOT_PASSWORD_SUCCESS_MESSAGE = "We've sent a password reset link to your email address. Please check your inbox and follow the instructions to reset your password.";
     private $userModel;
     private $rateLimiter;
     private $supabaseStorage;
@@ -486,6 +487,223 @@ class AuthController
     }
 
     /**
+     * Request password reset link
+     */
+    public function forgotPassword()
+    {
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        $clientIp = RateLimitMiddleware::getClientIdentifier();
+        $this->rateLimiter->enforce($clientIp, 'forgot_password_ip', 5, 900); // 5 attempts per 15 minutes
+
+        $errors = Validator::validate($input, [
+            'email' => 'required|email'
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        $email = strtolower(Sanitizer::email((string)($input['email'] ?? '')));
+        if ($email === '' || !Validator::email($email)) {
+            Response::error('Validation failed', 400, [
+                'email' => ['The email must be a valid email address.']
+            ]);
+        }
+
+        $this->rateLimiter->enforce($clientIp . ':' . hash('sha256', $email), 'forgot_password_email', 3, 900); // 3 attempts per email/IP in 15 minutes
+
+        $user = $this->userModel->getByEmail($email);
+        if (!$user) {
+            Response::error('No user exists with this email address.', 404);
+        }
+
+        $db = Database::getConnection();
+
+        try {
+            $token = bin2hex(random_bytes(32));
+            $tokenHash = hash('sha256', $token);
+            $expiresAt = $this->getPasswordResetExpiryTimestamp();
+            $resetUrl = $this->buildResetPasswordUrl($token);
+
+            $db->beginTransaction();
+
+            $clearStmt = $db->prepare("DELETE FROM password_reset_tokens WHERE user_id = :user_id");
+            $clearStmt->execute([':user_id' => $user['id']]);
+
+            $insertSql = "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, requested_ip, user_agent)
+                          VALUES (:user_id, :token_hash, :expires_at, :requested_ip, :user_agent)";
+            $insertStmt = $db->prepare($insertSql);
+            $insertStmt->execute([
+                ':user_id' => $user['id'],
+                ':token_hash' => $tokenHash,
+                ':expires_at' => $expiresAt,
+                ':requested_ip' => $_SERVER['REMOTE_ADDR'] ?? null,
+                ':user_agent' => substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500)
+            ]);
+
+            $emailSent = $this->emailNotifications->sendPasswordResetLink(
+                $email,
+                $resetUrl,
+                $this->getPasswordResetExpiryMinutes()
+            );
+
+            if (!$emailSent) {
+                throw new Exception('Failed to send password reset email');
+            }
+
+            $db->commit();
+            Response::success([], self::FORGOT_PASSWORD_SUCCESS_MESSAGE);
+        } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('Forgot password failed: ' . $e->getMessage());
+            Response::error('Unable to process forgot password request at this time. Please try again later.', 500);
+        }
+    }
+
+    /**
+     * Verify password reset token validity
+     */
+    public function verifyResetPasswordToken()
+    {
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        $errors = Validator::validate($input, [
+            'token' => 'required|min:32|max:512'
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        $token = trim((string)($input['token'] ?? ''));
+        if ($token === '') {
+            Response::error('Validation failed', 400, [
+                'token' => ['The token field is required.']
+            ]);
+        }
+
+        $tokenHash = hash('sha256', $token);
+        $tokenRecord = $this->findValidPasswordResetToken($tokenHash);
+
+        if (!$tokenRecord) {
+            Response::error('Invalid or expired password reset token.', 400);
+        }
+
+        Response::success([], 'Reset token is valid.');
+    }
+
+    /**
+     * Update password using reset token
+     */
+    public function resetPassword()
+    {
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        $clientIp = RateLimitMiddleware::getClientIdentifier();
+        $this->rateLimiter->enforce($clientIp, 'reset_password', 10, 900); // 10 attempts per 15 minutes
+
+        $errors = Validator::validate($input, [
+            'token' => 'required|min:32|max:512',
+            'new_password' => 'required|min:8|strong_password',
+            'confirm_password' => 'required'
+        ]);
+
+        if (!empty($errors)) {
+            Response::error('Validation failed', 400, $errors);
+        }
+
+        $token = trim((string)($input['token'] ?? ''));
+        $newPassword = (string)($input['new_password'] ?? '');
+        $confirmPassword = (string)($input['confirm_password'] ?? '');
+
+        if ($newPassword !== $confirmPassword) {
+            Response::error('New passwords do not match', 400);
+        }
+
+        if ($token === '') {
+            Response::error('Validation failed', 400, [
+                'token' => ['The token field is required.']
+            ]);
+        }
+
+        $tokenHash = hash('sha256', $token);
+        $db = Database::getConnection();
+        $now = gmdate('Y-m-d H:i:s');
+
+        try {
+            $db->beginTransaction();
+
+            $tokenSql = "SELECT id, user_id
+                         FROM password_reset_tokens
+                         WHERE token_hash = :token_hash
+                           AND used_at IS NULL
+                           AND expires_at > :now
+                         LIMIT 1
+                         FOR UPDATE";
+            $tokenStmt = $db->prepare($tokenSql);
+            $tokenStmt->execute([
+                ':token_hash' => $tokenHash,
+                ':now' => $now
+            ]);
+            $tokenRecord = $tokenStmt->fetch();
+
+            if (!$tokenRecord) {
+                $db->rollBack();
+                Response::error('Invalid or expired password reset token.', 400);
+            }
+
+            $newPasswordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+
+            $updateUserStmt = $db->prepare("UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id");
+            $updateUserStmt->execute([
+                ':password_hash' => $newPasswordHash,
+                ':updated_at' => $now,
+                ':id' => $tokenRecord['user_id']
+            ]);
+
+            $markUsedStmt = $db->prepare("UPDATE password_reset_tokens SET used_at = :used_at WHERE id = :id");
+            $markUsedStmt->execute([
+                ':used_at' => $now,
+                ':id' => $tokenRecord['id']
+            ]);
+
+            $invalidateStmt = $db->prepare("DELETE FROM password_reset_tokens WHERE user_id = :user_id AND id != :id");
+            $invalidateStmt->execute([
+                ':user_id' => $tokenRecord['user_id'],
+                ':id' => $tokenRecord['id']
+            ]);
+
+            // Invalidate active sessions so old sessions cannot keep using old auth state.
+            $sessionsStmt = $db->prepare("DELETE FROM user_sessions WHERE user_id = :user_id");
+            $sessionsStmt->execute([':user_id' => $tokenRecord['user_id']]);
+
+            $db->commit();
+            Response::success([], 'Password has been reset successfully.');
+        } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('Reset password failed: ' . $e->getMessage());
+            Response::error('Unable to reset password at this time. Please try again later.', 500);
+        }
+    }
+
+    /**
      * Get current authenticated user
      */
     public function me()
@@ -925,6 +1143,59 @@ public function getAddresses()
                 error_log('Failed to sign user registration document URL: ' . $e->getMessage());
             }
         }
+    }
+
+    private function findValidPasswordResetToken($tokenHash)
+    {
+        $db = Database::getConnection();
+        $sql = "SELECT id, user_id
+                FROM password_reset_tokens
+                WHERE token_hash = :token_hash
+                  AND used_at IS NULL
+                  AND expires_at > :now
+                LIMIT 1";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([
+            ':token_hash' => $tokenHash,
+            ':now' => gmdate('Y-m-d H:i:s')
+        ]);
+
+        return $stmt->fetch() ?: null;
+    }
+
+    private function getPasswordResetExpiryMinutes()
+    {
+        $minutes = (int)Env::get('PASSWORD_RESET_TOKEN_EXPIRY_MINUTES', 30);
+        if ($minutes < 5) {
+            return 5;
+        }
+        if ($minutes > 120) {
+            return 120;
+        }
+        return $minutes;
+    }
+
+    private function getPasswordResetExpiryTimestamp()
+    {
+        return gmdate('Y-m-d H:i:s', time() + ($this->getPasswordResetExpiryMinutes() * 60));
+    }
+
+    private function buildResetPasswordUrl($token)
+    {
+        $frontendUrl = trim((string)Env::get('FRONTEND_URL', ''));
+        if ($frontendUrl === '') {
+            $corsOrigins = trim((string)Env::get('CORS_ALLOWED_ORIGINS', ''));
+            if ($corsOrigins !== '') {
+                $originParts = preg_split('/[,\s]+/', $corsOrigins);
+                $frontendUrl = trim((string)($originParts[0] ?? ''));
+            }
+        }
+
+        if ($frontendUrl === '') {
+            $frontendUrl = 'http://localhost:3000';
+        }
+
+        return rtrim($frontendUrl, '/') . '/reset-password?token=' . rawurlencode($token);
     }
 
     private function extractStorageObjectPath($value, $bucket)
