@@ -428,8 +428,8 @@ class OrderApiTest extends TestCase
             
             $expectedSubtotal = 1955.00;
             $expectedTax = round($expectedSubtotal * 0.19, 2);
-            $expectedShipping = 9.99;
-            $expectedTotal = $expectedSubtotal + $expectedTax + $expectedShipping;
+            $expectedShipping = 0.00;
+            $expectedTotal = $expectedSubtotal + $expectedTax;
             
             $this->assertEquals($expectedSubtotal, floatval($order['subtotal']));
             $this->assertEquals($expectedTax, floatval($order['tax']));
@@ -511,4 +511,3 @@ class OrderApiTest extends TestCase
         // For testing, we'll rely on test database and mocked services
     }
 }
-

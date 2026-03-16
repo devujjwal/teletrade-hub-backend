@@ -50,6 +50,8 @@ Update the following variables:
 - `JWT_SECRET` - Generate a strong secret key
 - `VENDOR_API_KEY` - TRIEL API key
 - `CORS_ALLOWED_ORIGINS` - Frontend URL
+- `SUPABASE_URL`, `SUPABASE_SECRET`, `SUPABASE_STORAGE_BUCKET_INVOICES` - Private invoice storage
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` - Transactional email delivery
 
 ### 2. Database Setup
 
@@ -57,6 +59,9 @@ Import the database schema:
 
 ```bash
 mysql -u vsmjr110_ujjwal -p vsmjr110_api < database/migrations.sql
+
+# PostgreSQL / Supabase deployments should also apply:
+# database/postgres/2026-03-16_order_invoice_workflow.sql
 ```
 
 ### 3. Permissions
@@ -94,6 +99,8 @@ chmod -R 775 storage/logs
 - `GET /admin/dashboard` - Dashboard statistics
 - `GET /admin/orders` - List all orders
 - `PUT /admin/orders/{id}/status` - Update order status
+- `PUT /admin/orders/{id}/financials` - Update shipping charges and final order price
+- `POST /admin/orders/{id}/invoice` - Upload a PDF invoice to private Supabase storage
 - `GET /admin/products` - List products
 - `PUT /admin/products/{id}` - Update product
 - `GET /admin/pricing` - Get pricing configuration
@@ -133,6 +140,7 @@ Key tables:
 - `categories` - Product categories
 - `brands` - Product brands
 - `orders` - Customer orders
+- `order_invoices` - Uploaded proforma invoices per order
 - `order_items` - Order line items
 - `reservations` - Vendor reservations
 - `users` - Customer accounts
@@ -167,9 +175,16 @@ Logs are stored in `storage/logs/`:
 
 ## Support
 
+## Manual Invoice Workflow
+
+- Checkout no longer estimates shipping charges.
+- Orders are placed with a base price only and await manual invoice review.
+- Admins upload PDF invoices to a private Supabase bucket and can update `shipping_cost` plus `final_order_price`.
+- Customers see signed invoice links only on their own order pages.
+- SMTP notifications are sent for registration, approval/rejection, order placement, and key status updates.
+
 For issues or questions, contact the development team.
 
 ---
 
 **© 2024 Telecommunication Trading e.K. - All rights reserved**
-

@@ -12,6 +12,8 @@ require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Utils/Language.php';
 require_once __DIR__ . '/../Utils/Sanitizer.php';
 require_once __DIR__ . '/../Services/SupabaseStorageService.php';
+require_once __DIR__ . '/../Models/OrderInvoice.php';
+require_once __DIR__ . '/../Services/EmailNotificationService.php';
 if (!class_exists('Database')) {
     require_once __DIR__ . '/../Config/database.php';
 }
@@ -34,6 +36,8 @@ class AdminController
     private $productSyncService;
     private $pricingService;
     private $supabaseStorage;
+    private $orderInvoiceModel;
+    private $emailNotifications;
     private $db;
 
     public function __construct()
@@ -51,6 +55,8 @@ class AdminController
             $this->productSyncService = null;
             $this->pricingService = null;
             $this->supabaseStorage = null;
+            $this->orderInvoiceModel = null;
+            $this->emailNotifications = null;
             $this->db = Database::getConnection();
         } catch (Exception $e) {
             error_log("AdminController constructor error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
@@ -195,6 +201,22 @@ class AdminController
             $this->supabaseStorage = new SupabaseStorageService();
         }
         return $this->supabaseStorage;
+    }
+
+    private function getOrderInvoiceModel()
+    {
+        if ($this->orderInvoiceModel === null) {
+            $this->orderInvoiceModel = new OrderInvoice();
+        }
+        return $this->orderInvoiceModel;
+    }
+
+    private function getEmailNotifications()
+    {
+        if ($this->emailNotifications === null) {
+            $this->emailNotifications = new EmailNotificationService();
+        }
+        return $this->emailNotifications;
     }
 
     /**
@@ -669,15 +691,21 @@ class AdminController
         $admin = $this->authMiddleware->verifyAdmin();
         $input = json_decode(file_get_contents('php://input'), true);
 
-        if (!isset($input['is_active'])) {
-            Response::error('is_active is required', 400);
+        $approvalStatus = $input['approval_status'] ?? null;
+        if ($approvalStatus === null && isset($input['is_active'])) {
+            $approvalStatus = !empty($input['is_active']) ? 'approved' : 'pending';
         }
 
-        $isActive = !empty($input['is_active']) ? 1 : 0;
-        $sql = "UPDATE users SET is_active = :is_active WHERE id = :id";
+        if (!in_array($approvalStatus, ['pending', 'approved', 'rejected'], true)) {
+            Response::error('approval_status is required', 400);
+        }
+
+        $isActive = $approvalStatus === 'approved' ? 1 : 0;
+        $sql = "UPDATE users SET is_active = :is_active, approval_status = :approval_status WHERE id = :id";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':is_active' => $isActive,
+            ':approval_status' => $approvalStatus,
             ':id' => (int)$id
         ]);
 
@@ -692,9 +720,17 @@ class AdminController
 
         unset($user['password_hash']);
 
+        if (!empty($user['email'])) {
+            if ($approvalStatus === 'approved') {
+                $this->getEmailNotifications()->sendAccountApproved($user['email']);
+            } elseif ($approvalStatus === 'rejected') {
+                $this->getEmailNotifications()->sendAccountRejected($user['email']);
+            }
+        }
+
         Response::success([
             'user' => $user
-        ], $isActive ? 'User approved successfully' : 'User marked as pending');
+        ], $approvalStatus === 'approved' ? 'User approved successfully' : ($approvalStatus === 'rejected' ? 'User rejected successfully' : 'User marked as pending'));
     }
 
     /**
@@ -770,6 +806,14 @@ class AdminController
                 }
             }
             // For 'cancelled', don't auto-change payment status
+
+            if ($currentOrder['status'] !== $newStatus && in_array($newStatus, ['processing', 'shipped', 'delivered'], true)) {
+                $fullOrder = $this->getOrderService()->getOrderDetails($id, true);
+                $customerEmail = $fullOrder['customer_email'] ?? null;
+                if ($customerEmail) {
+                    $this->getEmailNotifications()->sendOrderStatusChanged($customerEmail, $fullOrder['order_number'], $newStatus);
+                }
+            }
             
             // Try to get full order details, but if it fails, just return success
             // (The status update has already succeeded at this point)
@@ -794,6 +838,87 @@ class AdminController
             error_log("Stack trace: " . $e->getTraceAsString());
             Response::error('Failed to update order: ' . $e->getMessage(), 500);
         }
+    }
+
+    public function updateOrderFinancials($id)
+    {
+        $this->authMiddleware->verifyAdmin();
+        $input = json_decode(file_get_contents('php://input'), true);
+
+        if (!$input) {
+            Response::error('Invalid request data', 400);
+        }
+
+        $order = $this->getOrderModel()->getById($id);
+        if (!$order) {
+            Response::notFound('Order not found');
+        }
+
+        $shippingCost = isset($input['shipping_cost']) ? round((float) $input['shipping_cost'], 2) : (float) ($order['shipping_cost'] ?? 0);
+        $finalOrderPrice = isset($input['final_order_price']) ? round((float) $input['final_order_price'], 2) : (float) ($order['final_order_price'] ?? $order['total']);
+        $basePrice = round((float) $order['total'], 2);
+
+        if ($shippingCost < 0) {
+            Response::error('Shipping charges cannot be negative', 422);
+        }
+
+        if ($finalOrderPrice < $basePrice) {
+            Response::error('Final order price must be greater than or equal to the base price', 422);
+        }
+
+        $this->getOrderModel()->updateFinancials($id, $shippingCost, $finalOrderPrice);
+        $updatedOrder = $this->getOrderService()->getOrderDetails($id, true);
+
+        Response::success(['order' => $updatedOrder], 'Order pricing updated');
+    }
+
+    public function uploadOrderInvoice($id)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+
+        $order = $this->getOrderModel()->getById($id);
+        if (!$order) {
+            Response::notFound('Order not found');
+        }
+
+        if (!isset($_FILES['invoice'])) {
+            Response::error('Invoice PDF is required', 400);
+        }
+
+        $file = $_FILES['invoice'];
+        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            Response::error('Invoice upload failed', 400);
+        }
+
+        $maxSize = 10 * 1024 * 1024;
+        if (($file['size'] ?? 0) <= 0 || $file['size'] > $maxSize) {
+            Response::error('Invoice file must be 10MB or smaller', 422);
+        }
+
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->file($file['tmp_name']);
+        if ($mimeType !== 'application/pdf') {
+            Response::error('Only PDF invoices are allowed', 422);
+        }
+
+        $timestamp = gmdate('YmdHis');
+        $objectPath = 'invoices/' . (int) $id . '/' . $timestamp . '.pdf';
+        $storedPath = $this->getSupabaseStorage()->uploadPrivateFile(
+            $file['tmp_name'],
+            'application/pdf',
+            $this->getSupabaseStorage()->getInvoiceBucket(),
+            $objectPath
+        );
+
+        $this->getOrderInvoiceModel()->create([
+            ':order_id' => (int) $id,
+            ':invoice_url' => $storedPath,
+            ':uploaded_at' => gmdate('Y-m-d H:i:s'),
+            ':uploaded_by_admin' => $admin['id'] ?? null
+        ]);
+
+        $updatedOrder = $this->getOrderService()->getOrderDetails($id, true);
+        Response::success(['order' => $updatedOrder], 'Invoice uploaded successfully');
     }
 
     /**

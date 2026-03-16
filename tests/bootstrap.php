@@ -128,12 +128,14 @@ class TestDatabase
             guest_email VARCHAR(255),
             status VARCHAR(50) DEFAULT 'pending',
             payment_status VARCHAR(50) DEFAULT 'unpaid',
+            fulfillment_status VARCHAR(50) DEFAULT 'pending',
             payment_method VARCHAR(50),
             payment_transaction_id VARCHAR(255),
             subtotal DECIMAL(10,2) NOT NULL,
             tax DECIMAL(10,2) NOT NULL,
             shipping_cost DECIMAL(10,2) NOT NULL,
             total DECIMAL(10,2) NOT NULL,
+            final_order_price DECIMAL(10,2),
             currency VARCHAR(3) DEFAULT 'EUR',
             billing_address_id INTEGER,
             shipping_address_id INTEGER,
@@ -152,12 +154,22 @@ class TestDatabase
             product_id INTEGER,
             product_name VARCHAR(255) NOT NULL,
             product_sku VARCHAR(100),
+            product_source VARCHAR(20) DEFAULT 'vendor',
             vendor_article_id VARCHAR(100),
             quantity INTEGER NOT NULL,
             base_price DECIMAL(10,2) NOT NULL,
             price DECIMAL(10,2) NOT NULL,
             subtotal DECIMAL(10,2) NOT NULL,
+            fulfillment_status VARCHAR(50) DEFAULT 'pending',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS order_invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            invoice_url TEXT NOT NULL,
+            uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            uploaded_by_admin INTEGER
         );
         
         CREATE TABLE IF NOT EXISTS reservations (
@@ -208,7 +220,12 @@ class TestDatabase
             password_hash VARCHAR(255) NOT NULL,
             first_name VARCHAR(100),
             last_name VARCHAR(100),
+            phone VARCHAR(50),
+            mobile VARCHAR(50),
+            approval_status VARCHAR(20) DEFAULT 'pending',
+            account_type VARCHAR(20) DEFAULT 'customer',
             is_admin BOOLEAN DEFAULT 0,
+            is_active BOOLEAN DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
@@ -228,6 +245,7 @@ class TestDatabase
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             key VARCHAR(100) UNIQUE NOT NULL,
             value TEXT,
+            type VARCHAR(50) DEFAULT 'string',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
@@ -276,9 +294,7 @@ class TestDatabase
         // Insert default settings
         self::$connection->exec("
             INSERT INTO settings (key, value) VALUES 
-            ('tax_rate', '19.0'),
-            ('shipping_cost', '9.99'),
-            ('free_shipping_threshold', '100.0')
+            ('tax_rate', '19.0')
         ");
     }
     
@@ -293,6 +309,7 @@ class TestDatabase
             self::$connection->exec("DELETE FROM reservations");
             self::$connection->exec("DELETE FROM addresses");
             self::$connection->exec("DELETE FROM users");
+            self::$connection->exec("DELETE FROM order_invoices");
             self::$connection->exec("DELETE FROM vendor_api_logs");
             
             // Reset pricing rules to default

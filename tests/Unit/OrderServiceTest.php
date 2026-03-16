@@ -132,8 +132,8 @@ class OrderServiceTest extends TestCase
         // Product 2: 920.00 * 1 = 920.00
         // Subtotal: 1955.00
         // Tax (19%): 371.45
-        // Shipping: 9.99 (total < 100, so shipping applies)
-        // Total: 2336.44
+        // Shipping is confirmed later by invoice, so base total excludes shipping.
+        // Total: 2326.45
         
         $cartItems = [
             ['product_id' => 1, 'quantity' => 1],
@@ -151,18 +151,15 @@ class OrderServiceTest extends TestCase
         
         $this->assertEquals(1955.00, floatval($order['subtotal']));
         $this->assertEquals(371.45, floatval($order['tax']));
-        $this->assertEquals(9.99, floatval($order['shipping_cost']));
-        $this->assertEquals(2336.44, floatval($order['total']));
+        $this->assertEquals(0.00, floatval($order['shipping_cost']));
+        $this->assertEquals(2326.45, floatval($order['total']));
     }
     
     /**
-     * Test free shipping threshold
+     * Test shipping defaults to zero until invoice review
      */
-    public function testFreeShippingThreshold()
+    public function testShippingDefaultsToZero()
     {
-        // Update free shipping threshold
-        $this->db->exec("UPDATE settings SET value = '50' WHERE key = 'free_shipping_threshold'");
-        
         $orderData = ['user_id' => 1, 'payment_method' => 'credit_card'];
         $cartItems = [['product_id' => 1, 'quantity' => 1]]; // Total will be > 50
         $billingAddress = $this->getTestAddress();
@@ -173,7 +170,6 @@ class OrderServiceTest extends TestCase
         $stmt->execute([$result['order_id']]);
         $order = $stmt->fetch();
         
-        // Shipping should be 0 (free)
         $this->assertEquals(0.00, floatval($order['shipping_cost']));
     }
     
@@ -415,4 +411,3 @@ class OrderServiceTest extends TestCase
         ];
     }
 }
-

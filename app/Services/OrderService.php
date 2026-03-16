@@ -5,6 +5,9 @@ require_once __DIR__ . '/../Models/OrderItem.php';
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/ReservationService.php';
 require_once __DIR__ . '/VendorApiService.php';
+require_once __DIR__ . '/../Models/User.php';
+require_once __DIR__ . '/../Models/OrderInvoice.php';
+require_once __DIR__ . '/SupabaseStorageService.php';
 
 /**
  * Order Service
@@ -17,6 +20,9 @@ class OrderService
     private $productModel;
     private $reservationService;
     private $vendorApi;
+    private $userModel;
+    private $orderInvoiceModel;
+    private $supabaseStorage;
     private $db;
 
     public function __construct()
@@ -26,6 +32,9 @@ class OrderService
         $this->productModel = new Product();
         $this->reservationService = new ReservationService();
         $this->vendorApi = new VendorApiService();
+        $this->userModel = new User();
+        $this->orderInvoiceModel = new OrderInvoice();
+        $this->supabaseStorage = new SupabaseStorageService();
         $this->db = Database::getConnection();
     }
 
@@ -33,8 +42,19 @@ class OrderService
      * Create new order from cart
      * Accepts either address IDs (for existing addresses) or address data (for new addresses)
      */
-    public function createOrder($orderData, $cartItems, $billingAddressId, $billingAddress, $shippingAddressId, $shippingAddress)
+    public function createOrder($orderData, $cartItems, $billingAddressId = null, $billingAddress = null, $shippingAddressId = null, $shippingAddress = null)
     {
+        // Backward compatibility for older call sites/tests that passed address payloads
+        // as positional arguments before explicit address ID support was introduced.
+        if (is_array($billingAddressId) && $billingAddress === null) {
+            $billingAddress = $billingAddressId;
+            $billingAddressId = null;
+        }
+        if (is_array($shippingAddressId) && $shippingAddress === null) {
+            $shippingAddress = $shippingAddressId;
+            $shippingAddressId = null;
+        }
+
         // Start transaction
         $this->db->beginTransaction();
 
@@ -82,8 +102,9 @@ class OrderService
                 ':payment_method' => $orderData['payment_method'] ?? null,
                 ':subtotal' => $totals['subtotal'],
                 ':tax' => $totals['tax'],
-                ':shipping_cost' => $totals['shipping'],
+                ':shipping_cost' => 0,
                 ':total' => $totals['total'],
+                ':final_order_price' => null,
                 ':currency' => 'EUR',
                 ':billing_address_id' => $finalBillingAddressId,
                 ':shipping_address_id' => $finalShippingAddressId,
@@ -151,7 +172,7 @@ class OrderService
                 'order_number' => $orderNumber,
                 'total' => $totals['total'],
                 'status' => 'pending',
-                'message' => 'Order created successfully. Please proceed with payment.'
+                'message' => 'Order created successfully. Your proforma invoice will be shared shortly.'
             ];
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -500,18 +521,11 @@ class OrderService
         $taxRate = $this->getSetting('tax_rate', 19.0) / 100;
         $tax = $subtotal * $taxRate;
 
-        // Get shipping cost
-        $shippingThreshold = floatval($this->getSetting('free_shipping_threshold', 100));
-        $shipping = $subtotal >= $shippingThreshold 
-            ? 0 
-            : floatval($this->getSetting('shipping_cost', 9.99));
-
-        $total = $subtotal + $tax + $shipping;
+        $total = $subtotal + $tax;
 
         return [
             'subtotal' => round($subtotal, 2),
             'tax' => round($tax, 2),
-            'shipping' => round($shipping, 2),
             'total' => round($total, 2)
         ];
     }
@@ -541,6 +555,27 @@ class OrderService
             return null;
         }
         
+        $user = null;
+        if (!empty($order['user_id'])) {
+            $user = $this->userModel->getById($order['user_id']);
+        }
+
+        if ($user) {
+            $order['customer_email'] = $user['email'] ?? null;
+            $order['customer_phone'] = $user['mobile'] ?? ($user['phone'] ?? null);
+            $order['customer_name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+        } else {
+            $order['customer_email'] = $order['guest_email'] ?? null;
+        }
+
+        $invoice = $this->orderInvoiceModel->getLatestForOrder($orderId);
+        if ($invoice) {
+            $invoice['signed_url'] = $this->createInvoiceSignedUrl($invoice['invoice_url']);
+            $order['invoice'] = $invoice;
+        } else {
+            $order['invoice'] = null;
+        }
+
         // For customers, remove internal fields (product_source, fulfillment_status, etc.)
         if (!$isAdmin) {
             $order = $this->sanitizeOrderForCustomer($order);
@@ -561,6 +596,7 @@ class OrderService
         unset($order['vendor_order_created_at']);
         unset($order['own_items_fulfilled_at']);
         unset($order['admin_notes']);
+        unset($order['guest_email']);
         
         // Sanitize order items
         if (isset($order['items']) && is_array($order['items'])) {
@@ -573,7 +609,30 @@ class OrderService
                 unset($item['vendor_article_id']); // Internal vendor SKU, not customer-facing
             }
         }
+
+        if (isset($order['invoice']) && is_array($order['invoice'])) {
+            unset($order['invoice']['invoice_url']);
+            unset($order['invoice']['uploaded_by_admin']);
+        }
         
         return $order;
+    }
+
+    private function createInvoiceSignedUrl($invoicePath)
+    {
+        if (!$invoicePath) {
+            return null;
+        }
+
+        try {
+            return $this->supabaseStorage->createSignedUrl(
+                $this->supabaseStorage->getInvoiceBucket(),
+                ltrim((string) $invoicePath, '/'),
+                3600
+            );
+        } catch (Exception $e) {
+            error_log('Failed to create invoice signed URL: ' . $e->getMessage());
+            return null;
+        }
     }
 }

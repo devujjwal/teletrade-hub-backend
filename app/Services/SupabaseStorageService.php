@@ -8,6 +8,7 @@ class SupabaseStorageService
     private $serviceRoleKey;
     private $registrationBucket;
     private $productsBucket;
+    private $invoiceBucket;
     private static $bucketChecked = [];
 
     public function __construct()
@@ -16,6 +17,7 @@ class SupabaseStorageService
         $this->serviceRoleKey = (string) Env::get('SUPABASE_SECRET', Env::get('SUPABASE_SERVICE_ROLE_KEY', ''));
         $this->registrationBucket = (string) Env::get('SUPABASE_STORAGE_BUCKET_REGISTRATION', 'registration-documents');
         $this->productsBucket = (string) Env::get('SUPABASE_STORAGE_BUCKET_PRODUCTS', 'product-images');
+        $this->invoiceBucket = (string) Env::get('SUPABASE_STORAGE_BUCKET_INVOICES', 'order-invoices');
     }
 
     public function getRegistrationBucket()
@@ -28,11 +30,31 @@ class SupabaseStorageService
         return $this->productsBucket;
     }
 
+    public function getInvoiceBucket()
+    {
+        return $this->invoiceBucket;
+    }
+
     public function uploadFile($tmpFilePath, $mimeType, $bucket, $objectPath)
     {
         $this->validateConfig();
         $this->ensureBucketExists($bucket, true);
+        $this->uploadObject($tmpFilePath, $mimeType, $bucket, $objectPath);
 
+        return $this->supabaseUrl . '/storage/v1/object/public/' . rawurlencode($bucket) . '/' . ltrim($objectPath, '/');
+    }
+
+    public function uploadPrivateFile($tmpFilePath, $mimeType, $bucket, $objectPath)
+    {
+        $this->validateConfig();
+        $this->ensureBucketExists($bucket, false);
+        $this->uploadObject($tmpFilePath, $mimeType, $bucket, $objectPath);
+
+        return ltrim($objectPath, '/');
+    }
+
+    private function uploadObject($tmpFilePath, $mimeType, $bucket, $objectPath)
+    {
         $fileContents = @file_get_contents($tmpFilePath);
         if ($fileContents === false) {
             throw new Exception('Unable to read uploaded file');
@@ -49,8 +71,6 @@ class SupabaseStorageService
             $errorMessage = $details['message'] ?? $details['error'] ?? 'Supabase upload failed';
             throw new Exception($errorMessage);
         }
-
-        return $this->supabaseUrl . '/storage/v1/object/public/' . rawurlencode($bucket) . '/' . ltrim($objectPath, '/');
     }
 
     public function deleteFile($bucket, $objectPath)

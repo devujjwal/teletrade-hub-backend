@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../Services/OrderService.php';
 require_once __DIR__ . '/../Models/User.php';
+require_once __DIR__ . '/../Services/EmailNotificationService.php';
 
 /**
  * Order Controller
@@ -11,11 +12,13 @@ class OrderController
 {
     private $orderService;
     private $orderModel;
+    private $emailNotifications;
 
     public function __construct()
     {
         $this->orderService = new OrderService();
         $this->orderModel = new Order();
+        $this->emailNotifications = new EmailNotificationService();
     }
 
     /**
@@ -158,6 +161,10 @@ class OrderController
                 $shippingAddressId,
                 $shippingAddress
             );
+
+            if (!empty($user['email'])) {
+                $this->emailNotifications->sendOrderPlaced($user['email']);
+            }
 
             Response::success($result, 'Order created successfully', 201);
         } catch (Exception $e) {
@@ -317,4 +324,3 @@ class OrderController
         }
     }
 }
-

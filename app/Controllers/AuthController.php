@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../Models/User.php';
 require_once __DIR__ . '/../Middlewares/RateLimitMiddleware.php';
 require_once __DIR__ . '/../Services/SupabaseStorageService.php';
+require_once __DIR__ . '/../Services/EmailNotificationService.php';
 
 /**
  * Auth Controller
@@ -13,12 +14,14 @@ class AuthController
     private $userModel;
     private $rateLimiter;
     private $supabaseStorage;
+    private $emailNotifications;
 
     public function __construct()
     {
         $this->userModel = new User();
         $this->rateLimiter = new RateLimitMiddleware();
         $this->supabaseStorage = new SupabaseStorageService();
+        $this->emailNotifications = new EmailNotificationService();
     }
 
     /**
@@ -169,7 +172,8 @@ class AuthController
                 ':business_registration_certificate_file' => null,
                 ':vat_certificate_file' => null,
                 ':tax_number_certificate_file' => null,
-                ':is_active' => 0
+                ':is_active' => 0,
+                ':approval_status' => 'pending'
             ]);
 
             foreach ($requiredDocuments as $field) {
@@ -194,6 +198,7 @@ class AuthController
             $user = $this->userModel->getById($userId);
 
             $this->attachSignedRegistrationDocumentUrls($user);
+            $this->emailNotifications->sendAccountCreated($user['email']);
 
             // Remove password hash from response
             unset($user['password_hash']);
@@ -377,6 +382,11 @@ class AuthController
 
             if (!password_verify($password, $user['password_hash'])) {
                 Response::error('The password you entered is incorrect. Please try again.', 401);
+            }
+
+            $approvalStatus = $user['approval_status'] ?? ($user['is_active'] ? 'approved' : 'pending');
+            if ($approvalStatus === 'rejected') {
+                Response::error('Your account has been rejected. Please contact support for further details.', 403);
             }
 
             if (!$user['is_active']) {

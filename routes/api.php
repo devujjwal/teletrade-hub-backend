@@ -179,7 +179,6 @@ $router->post('orders/{orderId}/payment-failed', 'OrderController', 'paymentFail
 // Shipping (Customer)
 $router->get('shipping/track/{trackingNumber}', 'ShippingController', 'track');
 $router->get('shipping/orders/{orderId}/tracking', 'ShippingController', 'getOrderTracking');
-$router->post('shipping/calculate', 'ShippingController', 'calculate');
 
 // Auth (Customer)
 $router->post('auth/register', 'AuthController', 'register');
@@ -205,6 +204,8 @@ $router->get('admin/dashboard', 'AdminController', 'dashboard');
 $router->get('admin/orders', 'AdminController', 'orders');
 $router->get('admin/orders/{id}', 'AdminController', 'orderDetail');
 $router->put('admin/orders/{id}/status', 'AdminController', 'updateOrderStatus');
+$router->put('admin/orders/{id}/financials', 'AdminController', 'updateOrderFinancials');
+$router->post('admin/orders/{id}/invoice', 'AdminController', 'uploadOrderInvoice');
 
 // Admin Users
 $router->get('admin/users', 'AdminController', 'users');

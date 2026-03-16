@@ -44,7 +44,8 @@ class User
                     business_registration_certificate_file,
                     vat_certificate_file,
                     tax_number_certificate_file,
-                    is_active
+                    is_active,
+                    approval_status
                 ) VALUES (
                     :account_type,
                     :email,
@@ -72,7 +73,8 @@ class User
                     :business_registration_certificate_file,
                     :vat_certificate_file,
                     :tax_number_certificate_file,
-                    :is_active
+                    :is_active,
+                    :approval_status
                 )";
 
         $stmt = $this->db->prepare($sql);

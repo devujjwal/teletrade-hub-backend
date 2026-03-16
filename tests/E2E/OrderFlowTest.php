@@ -334,13 +334,13 @@ class OrderFlowTest extends TestCase
     }
     
     /**
-     * E2E TEST: Free shipping threshold
+     * E2E TEST: Shipping remains pending until invoice review
      */
-    public function testFreeShippingThreshold()
+    public function testShippingDefaultsToZero()
     {
         $orderService = new OrderService();
         
-        // Small order (with shipping)
+        // Small order
         $smallOrder = $orderService->createOrder(
             ['guest_email' => 'customer@example.com', 'payment_method' => 'credit_card'],
             [['product_id' => 3, 'quantity' => 1]], // Total < 100
@@ -352,9 +352,9 @@ class OrderFlowTest extends TestCase
         $stmt->execute([$smallOrder['order_id']]);
         $order1 = $stmt->fetch();
         
-        $this->assertEquals(9.99, floatval($order1['shipping_cost']));
+        $this->assertEquals(0.00, floatval($order1['shipping_cost']));
         
-        // Large order (free shipping)
+        // Large order
         $largeOrder = $orderService->createOrder(
             ['guest_email' => 'customer@example.com', 'payment_method' => 'credit_card'],
             [['product_id' => 1, 'quantity' => 2]], // Total > 100
@@ -408,4 +408,3 @@ class OrderFlowTest extends TestCase
         ];
     }
 }
-

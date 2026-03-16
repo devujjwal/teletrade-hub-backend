@@ -19,11 +19,11 @@ class Order
     {
         $sql = "INSERT INTO orders (
             order_number, user_id, guest_email, status, payment_status, fulfillment_status, payment_method,
-            subtotal, tax, shipping_cost, total, currency, billing_address_id,
+            subtotal, tax, shipping_cost, total, final_order_price, currency, billing_address_id,
             shipping_address_id, notes, ip_address, user_agent
         ) VALUES (
             :order_number, :user_id, :guest_email, :status, :payment_status, :fulfillment_status, :payment_method,
-            :subtotal, :tax, :shipping_cost, :total, :currency, :billing_address_id,
+            :subtotal, :tax, :shipping_cost, :total, :final_order_price, :currency, :billing_address_id,
             :shipping_address_id, :notes, :ip_address, :user_agent
         )";
 
@@ -122,6 +122,21 @@ class Order
         $sql = "UPDATE orders SET status = :status WHERE id = :id";
         $stmt = $this->db->prepare($sql);
         return $stmt->execute([':id' => $id, ':status' => $status]);
+    }
+
+    public function updateFinancials($id, $shippingCost, $finalOrderPrice)
+    {
+        $sql = "UPDATE orders
+                SET shipping_cost = :shipping_cost,
+                    final_order_price = :final_order_price
+                WHERE id = :id";
+
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([
+            ':id' => $id,
+            ':shipping_cost' => $shippingCost,
+            ':final_order_price' => $finalOrderPrice
+        ]);
     }
 
     /**
