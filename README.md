@@ -108,6 +108,10 @@ chmod -R 775 storage/logs
 - `POST /admin/sync/products` - Sync vendor products
 - `POST /admin/vendor/create-sales-order` - Create vendor sales order
 
+### Cron Endpoint (SYNC_KEY Protected)
+
+- `POST /cron/sync/products?key=YOUR_SYNC_KEY` - Trigger vendor product sync without admin login token
+
 ## Security Features
 
 - ✅ Prepared statements (SQL injection prevention)
@@ -165,6 +169,16 @@ If needed, manually pull in cPanel:
 ```bash
 cd /home/vsmjr110/public_html/api
 git pull origin main
+```
+
+### OCI Cron Setup (Linux VM)
+
+Run this once on your server to install or repair cron jobs:
+
+```bash
+cd /path/to/teletrade-hub-backend
+bash bin/setup-oci-cron.sh /path/to/teletrade-hub-backend
+crontab -l
 ```
 
 ## Logging

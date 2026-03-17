@@ -241,6 +241,47 @@ class AdminController
     }
 
     /**
+     * Get all HTTP headers (polyfill for environments without getallheaders).
+     */
+    private function getAllHeaders()
+    {
+        if (function_exists('getallheaders')) {
+            return getallheaders();
+        }
+
+        $headers = [];
+        foreach ($_SERVER as $name => $value) {
+            if (substr($name, 0, 5) === 'HTTP_') {
+                $normalized = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))));
+                $headers[$normalized] = $value;
+            }
+        }
+
+        return $headers;
+    }
+
+    /**
+     * Validate static SYNC_KEY for cron-triggered endpoints.
+     */
+    private function verifySyncKey()
+    {
+        $expectedKey = trim((string) Env::get('SYNC_KEY', ''));
+        if ($expectedKey === '') {
+            Response::forbidden('SYNC_KEY is not configured');
+        }
+
+        $providedKey = trim((string) ($_GET['key'] ?? ''));
+        if ($providedKey === '') {
+            $headers = $this->getAllHeaders();
+            $providedKey = trim((string) ($headers['X-Sync-Key'] ?? $headers['x-sync-key'] ?? $_SERVER['HTTP_X_SYNC_KEY'] ?? ''));
+        }
+
+        if ($providedKey === '' || !hash_equals($expectedKey, $providedKey)) {
+            Response::unauthorized('Invalid sync key');
+        }
+    }
+
+    /**
      * Debug: Get database diagnostics (temporary - no auth required)
      * SECURITY: Only available in development mode with secure key
      */
@@ -1643,6 +1684,45 @@ class AdminController
             ], 'Product sync started successfully');
         } catch (Exception $e) {
             Response::error('Sync failed: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Sync products from vendor via cron (SYNC_KEY protected, no admin login token required).
+     */
+    public function cronSyncProducts()
+    {
+        $this->verifySyncKey();
+
+        try {
+            if ($this->isSyncRunning()) {
+                Response::error('A product sync is already in progress. Please wait for it to finish.', 409);
+            }
+
+            $vendorSyncEnabled = $this->getSettingsModel()->get('vendor_sync_enabled', true);
+            if (!$vendorSyncEnabled) {
+                Response::success([
+                    'status' => 'skipped',
+                    'reason' => 'vendor_sync_disabled',
+                ], 'Automatic vendor sync is disabled in settings');
+            }
+
+            $languageIds = null;
+            if (isset($_GET['languages'])) {
+                $languageIds = array_map('intval', explode(',', $_GET['languages']));
+            } elseif (isset($_GET['lang'])) {
+                $langId = is_numeric($_GET['lang']) ? (int)$_GET['lang'] : Language::getIdFromCode($_GET['lang']);
+                $languageIds = [$langId];
+            }
+
+            $this->dispatchProductSync($languageIds);
+
+            Response::success([
+                'status' => 'started',
+                'languages' => $languageIds,
+            ], 'Cron product sync started successfully');
+        } catch (Exception $e) {
+            Response::error('Cron sync failed: ' . $e->getMessage(), 500);
         }
     }
 

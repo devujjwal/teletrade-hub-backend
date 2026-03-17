@@ -145,6 +145,9 @@ $router = new Router();
 $router->get('', 'HealthController', 'index');
 $router->get('health', 'HealthController', 'check');
 
+// Cron jobs (protected with SYNC_KEY, not admin bearer token)
+$router->post('cron/sync/products', 'AdminController', 'cronSyncProducts');
+
 
 // Languages
 $router->get('languages', 'ProductController', 'languages');

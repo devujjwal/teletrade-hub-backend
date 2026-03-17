@@ -33,6 +33,17 @@ Following TRIEL's recommended workflow:
 
 ## Cron Job Configuration
 
+### OCI Quick Setup (Recommended)
+```bash
+cd /path/to/teletrade-hub-backend
+bash bin/setup-oci-cron.sh /path/to/teletrade-hub-backend
+crontab -l
+```
+
+This installs/repairs both cron jobs in an idempotent way:
+- Product sync at `03:00` daily
+- Vendor sales order job at `17:00` daily
+
 ### Step 1: Make Scripts Executable
 ```bash
 cd /path/to/teletrade-hub-backend
@@ -140,8 +151,7 @@ If cron jobs are not available, you can trigger via API:
 
 ### Stock Sync
 ```bash
-curl -X POST https://your-domain.com/admin/sync/products \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+curl -X POST "https://your-domain.com/cron/sync/products?key=YOUR_SYNC_KEY"
 ```
 
 ### Create Vendor Orders
@@ -150,7 +160,9 @@ curl -X POST https://your-domain.com/admin/vendor/create-sales-order \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
 ```
 
-**Note:** API endpoints require admin authentication.
+**Note:**  
+- `cron/sync/products` uses `SYNC_KEY` (stable key, good for cron).  
+- Admin endpoints use Bearer tokens that expire (`ADMIN_TOKEN_EXPIRY`, default 24h), so they are not ideal for unattended cron.
 
 ## Summary
 
@@ -159,4 +171,3 @@ curl -X POST https://your-domain.com/admin/vendor/create-sales-order \
 ✅ **Create Sales Orders** (17:00) - CreateSalesOrder batch at end of day  
 
 This matches TRIEL's recommended workflow exactly!
-
