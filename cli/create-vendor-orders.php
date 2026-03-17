@@ -57,9 +57,63 @@ function logMessage($message, $level = 'INFO') {
     @error_log($logMessage, 3, $logFile);
 }
 
+/**
+ * Acquire process lock to prevent overlapping cron runs.
+ */
+function acquireRunLock()
+{
+    global $basePath;
+
+    $lockDir = $basePath . '/storage/locks';
+    if (!is_dir($lockDir)) {
+        @mkdir($lockDir, 0755, true);
+    }
+
+    $lockFile = $lockDir . '/vendor-orders.lock';
+    $lockHandle = @fopen($lockFile, 'c');
+    if ($lockHandle === false) {
+        throw new Exception("Unable to open lock file: {$lockFile}");
+    }
+
+    // Non-blocking lock: if another process owns it, skip this run.
+    if (!@flock($lockHandle, LOCK_EX | LOCK_NB)) {
+        @fclose($lockHandle);
+        return [null, $lockFile];
+    }
+
+    // Record owner info for easier debugging.
+    @ftruncate($lockHandle, 0);
+    @fwrite($lockHandle, getmypid() . '|' . date('c'));
+    @fflush($lockHandle);
+
+    return [$lockHandle, $lockFile];
+}
+
 // Log startup
 logMessage("Script started from: " . __DIR__);
 logMessage("Base path determined: " . $basePath);
+
+// Prevent overlapping runs
+$lockHandle = null;
+$lockFile = null;
+try {
+    [$lockHandle, $lockFile] = acquireRunLock();
+} catch (Exception $e) {
+    logMessage("ERROR acquiring lock: " . $e->getMessage(), 'ERROR');
+    exit(1);
+}
+
+if ($lockHandle === null) {
+    logMessage("Another vendor order cron is already running (lock: {$lockFile}). Skipping this run.", 'WARNING');
+    exit(0);
+}
+
+register_shutdown_function(function () use (&$lockHandle) {
+    if (is_resource($lockHandle)) {
+        @flock($lockHandle, LOCK_UN);
+        @fclose($lockHandle);
+    }
+});
 
 // Check if app directory exists
 $appPath = $basePath . '/app';

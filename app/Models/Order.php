@@ -191,6 +191,21 @@ class Order
     }
 
     /**
+     * Mark own-source items as fulfilled after stock deduction.
+     */
+    public function markOwnItemsFulfilled($orderId)
+    {
+        $sql = "UPDATE order_items
+                SET fulfillment_status = 'fulfilled'
+                WHERE order_id = :order_id
+                AND product_source = 'own'
+                AND fulfillment_status IN ('stock_deducted', 'pending')";
+
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([':order_id' => $orderId]);
+    }
+
+    /**
      * Get all orders with filters
      */
     public function getAll($filters = [], $page = 1, $limit = 20)
@@ -354,12 +369,11 @@ class Order
     {
         $sql = "SELECT DISTINCT o.* FROM orders o
                 INNER JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.status = 'reserved'
-                AND o.payment_status = 'paid'
+                WHERE o.status IN ('reserved', 'processing')
                 AND oi.product_source = 'vendor'
                 AND oi.fulfillment_status = 'reserved'
                 AND o.vendor_order_id IS NULL
-                ORDER BY o.paid_at ASC";
+                ORDER BY o.created_at ASC";
         
         $stmt = $this->db->query($sql);
         return $stmt->fetchAll();

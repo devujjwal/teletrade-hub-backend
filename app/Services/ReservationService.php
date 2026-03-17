@@ -240,6 +240,14 @@ class ReservationService
     }
 
     /**
+     * Get reservations ready for sales order for one order only
+     */
+    public function getReservationsForSalesOrderByOrder($orderId)
+    {
+        return $this->reservationModel->getReadyForSalesOrderByOrder($orderId);
+    }
+
+    /**
      * Mark reservations as ordered
      */
     public function markAsOrdered($reservationIds)
@@ -247,4 +255,3 @@ class ReservationService
         return $this->reservationModel->markAsOrdered($reservationIds);
     }
 }
-

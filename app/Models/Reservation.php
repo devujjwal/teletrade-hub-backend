@@ -124,6 +124,24 @@ class Reservation
     }
 
     /**
+     * Get reservations ready for sales order for one order only
+     */
+    public function getReadyForSalesOrderByOrder($orderId)
+    {
+        $sql = "SELECT r.*, p.vendor_article_id, p.name as product_name
+                FROM reservations r
+                JOIN products p ON r.product_id = p.id
+                WHERE r.order_id = :order_id
+                AND r.status = 'reserved'
+                AND r.vendor_reservation_id IS NOT NULL
+                ORDER BY r.reserved_at ASC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':order_id' => $orderId]);
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Mark as ordered
      */
     public function markAsOrdered($reservationIds)
@@ -155,4 +173,3 @@ class Reservation
         return $stmt->fetchAll();
     }
 }
-
