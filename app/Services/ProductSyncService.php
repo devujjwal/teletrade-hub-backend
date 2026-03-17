@@ -5,6 +5,7 @@ require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/VendorApiService.php';
 require_once __DIR__ . '/PricingService.php';
+require_once __DIR__ . '/ContentInvalidationService.php';
 require_once __DIR__ . '/../Utils/Language.php';
 
 /**
@@ -24,6 +25,7 @@ class ProductSyncService
     private $pricingService;
     private $db;
     private $syncLogId;
+    private $contentInvalidation;
     private static $syncRetentionPruned = false;
 
     public function __construct()
@@ -33,6 +35,7 @@ class ProductSyncService
         $this->categoryModel = new Category();
         $this->brandModel = new Brand();
         $this->pricingService = new PricingService();
+        $this->contentInvalidation = new ContentInvalidationService();
         $this->db = Database::getConnection();
     }
 
@@ -92,6 +95,16 @@ class ProductSyncService
             $stats['disabled'] = $this->disableUnavailableProducts($products);
 
             $this->completeSyncLog('completed', $stats);
+            $this->contentInvalidation->invalidate(
+                ['products', 'categories', 'brands', 'home'],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'revalidateAllProductPages' => true,
+                    'revalidateAllCategoryPages' => true,
+                    'revalidateAllBrandPages' => true,
+                ]
+            );
 
             return $stats;
         } catch (Exception $e) {

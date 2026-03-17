@@ -14,6 +14,9 @@ require_once __DIR__ . '/../Utils/Sanitizer.php';
 require_once __DIR__ . '/../Services/SupabaseStorageService.php';
 require_once __DIR__ . '/../Models/OrderInvoice.php';
 require_once __DIR__ . '/../Services/EmailNotificationService.php';
+require_once __DIR__ . '/../Services/ContentInvalidationService.php';
+require_once __DIR__ . '/../Services/ApiCacheService.php';
+require_once __DIR__ . '/../Services/DiagnosticsLoggerService.php';
 if (!class_exists('Database')) {
     require_once __DIR__ . '/../Config/database.php';
 }
@@ -38,6 +41,8 @@ class AdminController
     private $supabaseStorage;
     private $orderInvoiceModel;
     private $emailNotifications;
+    private $contentInvalidation;
+    private $apiCache;
     private $db;
 
     public function __construct()
@@ -57,6 +62,8 @@ class AdminController
             $this->supabaseStorage = null;
             $this->orderInvoiceModel = null;
             $this->emailNotifications = null;
+            $this->contentInvalidation = null;
+            $this->apiCache = new ApiCacheService();
             $this->db = Database::getConnection();
         } catch (Exception $e) {
             error_log("AdminController constructor error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
@@ -217,6 +224,20 @@ class AdminController
             $this->emailNotifications = new EmailNotificationService();
         }
         return $this->emailNotifications;
+    }
+
+    private function getContentInvalidation()
+    {
+        if ($this->contentInvalidation === null) {
+            $this->contentInvalidation = new ContentInvalidationService();
+        }
+
+        return $this->contentInvalidation;
+    }
+
+    private function invalidateContent(array $tags = [], array $revalidatePayload = [])
+    {
+        $this->getContentInvalidation()->invalidate($tags, $revalidatePayload);
     }
 
     /**
@@ -1223,6 +1244,22 @@ class AdminController
             }
             
             $product = $this->getProductModel()->getById($productId);
+            $revalidatePayload = [
+                'homeChanged' => true,
+                'productsListingChanged' => true,
+                'revalidateAllCategoryPages' => true,
+                'revalidateAllBrandPages' => true,
+            ];
+            if (!empty($product['slug'])) {
+                $revalidatePayload['productSlugs'] = [$product['slug']];
+            }
+            $this->invalidateContent([
+                'products',
+                'home',
+                'product:' . intval($productId),
+                !empty($product['category_id']) ? 'category:' . intval($product['category_id']) : '',
+                !empty($product['brand_id']) ? 'brand:' . intval($product['brand_id']) : '',
+            ], $revalidatePayload);
             
             Response::success(['product' => $product], 'Product created successfully');
         } catch (Exception $e) {
@@ -1349,6 +1386,22 @@ class AdminController
             }
             
             $product = $this->getProductModel()->getById($id);
+            $revalidatePayload = [
+                'homeChanged' => true,
+                'productsListingChanged' => true,
+                'revalidateAllCategoryPages' => true,
+                'revalidateAllBrandPages' => true,
+            ];
+            if (!empty($product['slug'])) {
+                $revalidatePayload['productSlugs'] = [$product['slug']];
+            }
+            $this->invalidateContent([
+                'products',
+                'home',
+                'product:' . intval($id),
+                !empty($product['category_id']) ? 'category:' . intval($product['category_id']) : '',
+                !empty($product['brand_id']) ? 'brand:' . intval($product['brand_id']) : '',
+            ], $revalidatePayload);
             Response::success(['product' => $product], 'Product updated successfully');
         } catch (Exception $e) {
             error_log("Update product error: " . $e->getMessage());
@@ -1401,12 +1454,32 @@ class AdminController
             // Optionally recalculate all prices
             if (!empty($input['recalculate'])) {
                 $updated = $this->getPricingService()->recalculateAllPrices();
+                $this->invalidateContent(
+                    ['products', 'home', 'categories', 'brands'],
+                    [
+                        'homeChanged' => true,
+                        'productsListingChanged' => true,
+                        'revalidateAllProductPages' => true,
+                        'revalidateAllCategoryPages' => true,
+                        'revalidateAllBrandPages' => true,
+                    ]
+                );
                 Response::success([
                     'account_type' => $accountType,
                     'markup_value' => $markupValue,
                     'products_updated' => $updated
                 ], 'Global markup updated and prices recalculated');
             } else {
+                $this->invalidateContent(
+                    ['products', 'home', 'categories', 'brands'],
+                    [
+                        'homeChanged' => true,
+                        'productsListingChanged' => true,
+                        'revalidateAllProductPages' => true,
+                        'revalidateAllCategoryPages' => true,
+                        'revalidateAllBrandPages' => true,
+                    ]
+                );
                 Response::success([
                     'account_type' => $accountType,
                     'markup_value' => $markupValue
@@ -1439,6 +1512,16 @@ class AdminController
             }
             
             $this->getPricingService()->setCategoryMarkup($categoryId, $markupValue, $markupType, $accountType);
+            $category = $this->getCategoryModel()->getById($categoryId);
+            $this->invalidateContent(
+                ['products', 'home', 'category:' . intval($categoryId)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'revalidateAllProductPages' => true,
+                    'categorySlugs' => !empty($category['slug']) ? [$category['slug']] : [],
+                ]
+            );
             
             Response::success([
                 'category_id' => $categoryId,
@@ -1500,6 +1583,23 @@ class AdminController
             if (empty($updated)) {
                 Response::error('At least one price (customer_price or merchant_price) is required', 400);
             }
+
+            $this->invalidateContent(
+                [
+                    'products',
+                    'home',
+                    'product:' . intval($productId),
+                    !empty($product['category_id']) ? 'category:' . intval($product['category_id']) : '',
+                    !empty($product['brand_id']) ? 'brand:' . intval($product['brand_id']) : '',
+                ],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'productSlugs' => !empty($product['slug']) ? [$product['slug']] : [],
+                    'categorySlugs' => !empty($product['category_slug']) ? [$product['category_slug']] : [],
+                    'brandSlugs' => !empty($product['brand_slug']) ? [$product['brand_slug']] : [],
+                ]
+            );
 
             Response::success([
                 'product_id' => (int)$productId,
@@ -1639,6 +1739,15 @@ class AdminController
 
             $categoryId = $this->getCategoryModel()->create($data);
             $category = $this->getCategoryModel()->getById($categoryId);
+            $this->invalidateContent(
+                ['categories', 'products', 'home', 'category:' . intval($categoryId)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'categorySlugs' => !empty($category['slug']) ? [$category['slug']] : [],
+                    'revalidateAllCategoryPages' => true,
+                ]
+            );
             
             Response::success(['category' => $category], 'Category created successfully');
         } catch (Exception $e) {
@@ -1681,6 +1790,15 @@ class AdminController
 
             $this->getCategoryModel()->update($id, $updateData);
             $category = $this->getCategoryModel()->getById($id);
+            $this->invalidateContent(
+                ['categories', 'products', 'home', 'category:' . intval($id)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'categorySlugs' => !empty($category['slug']) ? [$category['slug']] : [],
+                    'revalidateAllCategoryPages' => true,
+                ]
+            );
             
             Response::success(['category' => $category], 'Category updated successfully');
         } catch (Exception $e) {
@@ -1708,6 +1826,15 @@ class AdminController
 
             // Soft delete by setting is_active = 0
             $this->getCategoryModel()->update($id, ['is_active' => 0]);
+            $this->invalidateContent(
+                ['categories', 'products', 'home', 'category:' . intval($id)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'revalidateAllCategoryPages' => true,
+                    'revalidateAllProductPages' => true,
+                ]
+            );
             
             Response::success([], 'Category deleted successfully');
         } catch (Exception $e) {
@@ -1766,6 +1893,15 @@ class AdminController
 
             $brandId = $this->getBrandModel()->create($data);
             $brand = $this->getBrandModel()->getById($brandId);
+            $this->invalidateContent(
+                ['brands', 'products', 'home', 'brand:' . intval($brandId)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'brandSlugs' => !empty($brand['slug']) ? [$brand['slug']] : [],
+                    'revalidateAllBrandPages' => true,
+                ]
+            );
             
             Response::success(['brand' => $brand], 'Brand created successfully');
         } catch (Exception $e) {
@@ -1808,6 +1944,15 @@ class AdminController
 
             $this->getBrandModel()->update($id, $updateData);
             $brand = $this->getBrandModel()->getById($id);
+            $this->invalidateContent(
+                ['brands', 'products', 'home', 'brand:' . intval($id)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'brandSlugs' => !empty($brand['slug']) ? [$brand['slug']] : [],
+                    'revalidateAllBrandPages' => true,
+                ]
+            );
             
             Response::success(['brand' => $brand], 'Brand updated successfully');
         } catch (Exception $e) {
@@ -1874,6 +2019,15 @@ class AdminController
 
             // Soft delete by setting is_active = 0
             $this->getBrandModel()->update($id, ['is_active' => 0]);
+            $this->invalidateContent(
+                ['brands', 'products', 'home', 'brand:' . intval($id)],
+                [
+                    'homeChanged' => true,
+                    'productsListingChanged' => true,
+                    'revalidateAllBrandPages' => true,
+                    'revalidateAllProductPages' => true,
+                ]
+            );
             
             Response::success([], 'Brand deleted successfully');
         } catch (Exception $e) {
@@ -1912,11 +2066,57 @@ class AdminController
     }
 
     /**
+     * Diagnostics stream for cache invalidation and frontend revalidation events.
+     */
+    public function cacheDiagnostics()
+    {
+        $this->authMiddleware->verifyAdmin();
+
+        try {
+            $enabled = strtolower((string) Env::get('CACHE_DIAGNOSTICS_ENABLED', 'true')) === 'true';
+            if (!$enabled) {
+                Response::forbidden('Cache diagnostics are disabled');
+            }
+
+            $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 100;
+            $events = DiagnosticsLoggerService::readRecent($limit);
+
+            Response::success([
+                'events' => $events,
+                'count' => count($events),
+                'limit' => max(1, min(500, $limit)),
+                'log_file' => 'storage/logs/cache-diagnostics.log',
+            ]);
+        } catch (Exception $e) {
+            Response::error('Failed to load cache diagnostics: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Get public settings (no auth required - returns only public fields)
      */
     public function getPublicSettings()
     {
         try {
+            $cacheKey = $this->apiCache->buildKey(
+                'settings:public',
+                ['lang' => $_GET['lang'] ?? 'en'],
+                [],
+                ['settings_public']
+            );
+            $cacheTtl = $this->apiCache->getTtlTaxonomy();
+            if ($this->apiCache->isEnabled() && $cacheKey !== '') {
+                $entry = $this->apiCache->get($cacheKey);
+                if ($entry) {
+                    http_response_code(intval($entry['status_code'] ?? 200));
+                    header('Content-Type: ' . ($entry['content_type'] ?? 'application/json; charset=utf-8'));
+                    header('Cache-Control: public, max-age=' . intval($cacheTtl) . ', s-maxage=' . intval($cacheTtl));
+                    header('X-API-Cache: HIT');
+                    echo (string) ($entry['body'] ?? '');
+                    exit;
+                }
+            }
+
             $allSettings = $this->getSettingsModel()->getAll();
             
             // Only return public-facing settings
@@ -1936,8 +2136,28 @@ class AdminController
                 'bic' => $allSettings['bic'] ?? '',
                 'bank_additional_info' => $allSettings['bank_additional_info'] ?? '',
             ];
-            
-            Response::success($publicSettings);
+
+            $payload = [
+                'success' => true,
+                'message' => 'Success',
+                'data' => $publicSettings,
+            ];
+            $json = json_encode(
+                $payload,
+                JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+            );
+
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            if ($this->apiCache->isEnabled() && $cacheKey !== '') {
+                header('Cache-Control: public, max-age=' . intval($cacheTtl) . ', s-maxage=' . intval($cacheTtl));
+                header('X-API-Cache: MISS');
+                $this->apiCache->put($cacheKey, $json, 200, 'application/json; charset=utf-8', $cacheTtl);
+            } else {
+                header('X-API-Cache: BYPASS');
+            }
+            echo $json;
+            exit;
         } catch (Exception $e) {
             Response::error('Failed to load settings: ' . $e->getMessage(), 500);
         }
@@ -1969,6 +2189,12 @@ class AdminController
             
             $this->getSettingsModel()->updateMultiple($sanitized);
             $updatedSettings = $this->getSettingsModel()->getAll();
+            $this->invalidateContent(
+                ['settings_public', 'home'],
+                [
+                    'homeChanged' => true,
+                ]
+            );
             
             Response::success($updatedSettings, 'Settings updated successfully');
         } catch (Exception $e) {

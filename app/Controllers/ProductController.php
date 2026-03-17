@@ -4,6 +4,7 @@ require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Services/PricingService.php';
+require_once __DIR__ . '/../Services/ApiCacheService.php';
 require_once __DIR__ . '/../Middlewares/LanguageMiddleware.php';
 if (!class_exists('Env')) {
     require_once __DIR__ . '/../Config/env.php';
@@ -19,6 +20,7 @@ class ProductController
     private $categoryModel;
     private $brandModel;
     private $pricingService;
+    private $apiCache;
 
     public function __construct()
     {
@@ -26,6 +28,7 @@ class ProductController
         $this->categoryModel = new Category();
         $this->brandModel = new Brand();
         $this->pricingService = new PricingService();
+        $this->apiCache = new ApiCacheService();
         
         // Initialize language middleware
         LanguageMiddleware::handle();
@@ -45,9 +48,15 @@ class ProductController
         
         if (!empty($_GET['category_id'])) {
             $filters['category_id'] = intval($_GET['category_id']);
+        } elseif (!empty($_GET['category'])) {
+            $category = $this->categoryModel->getBySlug(Sanitizer::string($_GET['category']), $lang);
+            $filters['category_id'] = $category ? intval($category['id']) : -1;
         }
         if (!empty($_GET['brand_id'])) {
             $filters['brand_id'] = intval($_GET['brand_id']);
+        } elseif (!empty($_GET['brand'])) {
+            $brand = $this->brandModel->getBySlug(Sanitizer::string($_GET['brand']), $lang);
+            $filters['brand_id'] = $brand ? intval($brand['id']) : -1;
         }
         if (!empty($_GET['min_price'])) {
             $filters['min_price'] = floatval($_GET['min_price']);
@@ -99,16 +108,36 @@ class ProductController
             $filters['order'] = Sanitizer::string($_GET['order']);
         }
 
+        $viewer = $this->resolveViewerContext();
+        $cacheTags = ['products'];
+        if (!empty($filters['category_id']) && intval($filters['category_id']) > 0) {
+            $cacheTags[] = 'category:' . intval($filters['category_id']);
+        }
+        if (!empty($filters['brand_id']) && intval($filters['brand_id']) > 0) {
+            $cacheTags[] = 'brand:' . intval($filters['brand_id']);
+        }
+
+        $cacheKey = $this->apiCache->buildKey('products:index', [
+            'lang' => $lang,
+            'page' => $page,
+            'limit' => $limit,
+            'filters' => $filters,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+        $cacheTtl = $this->apiCache->getTtlProducts();
+        $this->serveCached($cacheKey, $cacheTtl);
+
         // Get products
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
-        $viewer = $this->resolveViewerContext();
         $products = $this->applyViewerPricing($products, $viewer);
         $total = $this->productModel->count($filters);
 
         // Get filter options
         $filterOptions = $this->productModel->getFilterOptions();
 
-        Response::success([
+        $this->respondSuccess([
             'products' => $products,
             'pagination' => [
                 'page' => $page,
@@ -118,7 +147,7 @@ class ProductController
             ],
             'filters' => $filterOptions,
             'language' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     /**
@@ -127,19 +156,45 @@ class ProductController
     public function show($slug)
     {
         $lang = LanguageMiddleware::getCurrentLanguage();
+        $viewer = $this->resolveViewerContext();
+        $cacheTags = ['products', 'product:slug:' . strtolower((string) $slug)];
+        $cacheKey = $this->apiCache->buildKey('products:show', [
+            'lang' => $lang,
+            'slug' => $slug,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+        $cacheTtl = $this->apiCache->getTtlProducts();
+        $this->serveCached($cacheKey, $cacheTtl);
+
         $product = $this->productModel->getBySlug($slug, $lang);
 
         if (!$product) {
             Response::notFound('Product not found');
         }
 
-        $viewer = $this->resolveViewerContext();
         $product = $this->applyViewerPricing([$product], $viewer)[0];
+        $cacheTags[] = 'product:' . intval($product['id']);
+        if (!empty($product['category_id'])) {
+            $cacheTags[] = 'category:' . intval($product['category_id']);
+        }
+        if (!empty($product['brand_id'])) {
+            $cacheTags[] = 'brand:' . intval($product['brand_id']);
+        }
 
-        Response::success([
+        $cacheKey = $this->apiCache->buildKey('products:show', [
+            'lang' => $lang,
+            'slug' => $slug,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+
+        $this->respondSuccess([
             'product' => $product,
             'language' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     /**
@@ -304,12 +359,18 @@ class ProductController
     public function categories()
     {
         $lang = LanguageMiddleware::getCurrentLanguage();
+        $cacheKey = $this->apiCache->buildKey('products:categories', [
+            'lang' => $lang,
+        ], [], ['categories']);
+        $cacheTtl = $this->apiCache->getTtlTaxonomy();
+        $this->serveCached($cacheKey, $cacheTtl);
+
         $categories = $this->categoryModel->getAllWithProductCount($lang);
 
-        Response::success([
+        $this->respondSuccess([
             'categories' => $categories,
             'language' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     /**
@@ -320,6 +381,19 @@ class ProductController
         $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $viewer = $this->resolveViewerContext();
+        $cacheTags = ['products', 'category:slug:' . strtolower((string) $categorySlug)];
+        $cacheKey = $this->apiCache->buildKey('products:by_category', [
+            'lang' => $lang,
+            'slug' => $categorySlug,
+            'page' => $page,
+            'limit' => $limit,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+        $cacheTtl = $this->apiCache->getTtlProducts();
+        $this->serveCached($cacheKey, $cacheTtl);
 
         $category = $this->categoryModel->getBySlug($categorySlug, $lang);
         if (!$category) {
@@ -328,11 +402,21 @@ class ProductController
 
         $filters = ['category_id' => $category['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
-        $viewer = $this->resolveViewerContext();
         $products = $this->applyViewerPricing($products, $viewer);
         $total = $this->productModel->count($filters);
+        $cacheTags[] = 'category:' . intval($category['id']);
 
-        Response::success([
+        $cacheKey = $this->apiCache->buildKey('products:by_category', [
+            'lang' => $lang,
+            'slug' => $categorySlug,
+            'page' => $page,
+            'limit' => $limit,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+
+        $this->respondSuccess([
             'category' => $category,
             'products' => $products,
             'pagination' => [
@@ -342,7 +426,7 @@ class ProductController
                 'pages' => ceil($total / $limit)
             ],
             'language' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     /**
@@ -351,11 +435,17 @@ class ProductController
     public function brands()
     {
         $lang = LanguageMiddleware::getCurrentLanguage();
+        $cacheKey = $this->apiCache->buildKey('products:brands', [
+            'lang' => $lang,
+        ], [], ['brands']);
+        $cacheTtl = $this->apiCache->getTtlTaxonomy();
+        $this->serveCached($cacheKey, $cacheTtl);
+
         $brands = $this->brandModel->getAllWithProductCount($lang);
-        Response::success([
+        $this->respondSuccess([
             'brands' => $brands,
             'language' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     /**
@@ -366,6 +456,19 @@ class ProductController
         $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $viewer = $this->resolveViewerContext();
+        $cacheTags = ['products', 'brand:slug:' . strtolower((string) $brandSlug)];
+        $cacheKey = $this->apiCache->buildKey('products:by_brand', [
+            'lang' => $lang,
+            'slug' => $brandSlug,
+            'page' => $page,
+            'limit' => $limit,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+        $cacheTtl = $this->apiCache->getTtlProducts();
+        $this->serveCached($cacheKey, $cacheTtl);
 
         $brand = $this->brandModel->getBySlug($brandSlug, $lang);
         if (!$brand) {
@@ -374,11 +477,21 @@ class ProductController
 
         $filters = ['brand_id' => $brand['id'], 'is_available' => 1];
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
-        $viewer = $this->resolveViewerContext();
         $products = $this->applyViewerPricing($products, $viewer);
         $total = $this->productModel->count($filters);
+        $cacheTags[] = 'brand:' . intval($brand['id']);
 
-        Response::success([
+        $cacheKey = $this->apiCache->buildKey('products:by_brand', [
+            'lang' => $lang,
+            'slug' => $brandSlug,
+            'page' => $page,
+            'limit' => $limit,
+        ], [
+            'account_type' => $viewer['account_type'] ?? 'customer',
+            'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+        ], $cacheTags);
+
+        $this->respondSuccess([
             'brand' => $brand,
             'products' => $products,
             'pagination' => [
@@ -388,7 +501,7 @@ class ProductController
                 'pages' => ceil($total / $limit)
             ],
             'language' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
     
     /**
@@ -402,5 +515,52 @@ class ProductController
             'languages' => $languages,
             'current' => LanguageMiddleware::getLanguageInfo()
         ]);
+    }
+
+    private function serveCached($cacheKey, $ttl)
+    {
+        if (!$this->apiCache->isEnabled() || $cacheKey === '') {
+            return;
+        }
+
+        $entry = $this->apiCache->get($cacheKey);
+        if (!$entry) {
+            return;
+        }
+
+        http_response_code(intval($entry['status_code'] ?? 200));
+        header('Content-Type: ' . ($entry['content_type'] ?? 'application/json; charset=utf-8'));
+        header('Cache-Control: public, max-age=' . intval($ttl) . ', s-maxage=' . intval($ttl));
+        header('X-API-Cache: HIT');
+        echo (string) ($entry['body'] ?? '');
+        exit;
+    }
+
+    private function respondSuccess($data = null, $message = 'Success', $statusCode = 200, $cacheKey = '', $ttl = 0)
+    {
+        $payload = [
+            'success' => true,
+            'message' => $message,
+            'data' => $data,
+        ];
+
+        $json = json_encode(
+            $payload,
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+        );
+
+        http_response_code($statusCode);
+        header('Content-Type: application/json; charset=utf-8');
+
+        if ($this->apiCache->isEnabled() && $cacheKey !== '' && $statusCode >= 200 && $statusCode < 300) {
+            header('Cache-Control: public, max-age=' . intval($ttl) . ', s-maxage=' . intval($ttl));
+            header('X-API-Cache: MISS');
+            $this->apiCache->put($cacheKey, $json, $statusCode, 'application/json; charset=utf-8', $ttl);
+        } else {
+            header('X-API-Cache: BYPASS');
+        }
+
+        echo $json;
+        exit;
     }
 }
