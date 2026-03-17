@@ -51,6 +51,11 @@ class ApiCacheService
         return max(1, intval(Env::get('API_CACHE_TTL_PRODUCTS', 120)));
     }
 
+    public function getTtlProductsPage1Warm()
+    {
+        return max(1, intval(Env::get('API_CACHE_TTL_PRODUCTS_PAGE1_WARM', 300)));
+    }
+
     public function getTtlTaxonomy()
     {
         return max(1, intval(Env::get('API_CACHE_TTL_TAXONOMY', 1800)));

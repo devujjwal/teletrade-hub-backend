@@ -8,6 +8,7 @@ class PricingService
 {
     private $db;
     private $markupCache = [];
+    private $ruleMapCache = [];
 
     public function __construct()
     {
@@ -46,69 +47,95 @@ class PricingService
             return $this->markupCache[$cacheKey];
         }
 
-        // Priority: product > category > brand > global
-        $sql = "SELECT * FROM pricing_rules 
-                WHERE is_active = 1
-                AND (account_type = :account_type_filter OR account_type IS NULL)";
-        $conditions = [];
-        $params = [
-            ':account_type_filter' => $accountType,
-            ':account_type_order' => $accountType
-        ];
+        $ruleMaps = $this->getRuleMapsForAccount($accountType);
+        $result = $ruleMaps['global'];
 
-        // Build conditions based on available IDs
         if ($productId !== null) {
-            $conditions[] = "(rule_type = 'product' AND entity_id = :product_id)";
-            $params[':product_id'] = $productId;
+            $productRule = $ruleMaps['product'][intval($productId)] ?? null;
+            if ($productRule !== null) {
+                $result = $productRule;
+                $this->markupCache[$cacheKey] = $result;
+                return $result;
+            }
         }
-        
         if ($categoryId !== null) {
-            $conditions[] = "(rule_type = 'category' AND entity_id = :category_id)";
-            $params[':category_id'] = $categoryId;
+            $categoryRule = $ruleMaps['category'][intval($categoryId)] ?? null;
+            if ($categoryRule !== null) {
+                $result = $categoryRule;
+                $this->markupCache[$cacheKey] = $result;
+                return $result;
+            }
         }
-        
         if ($brandId !== null) {
-            $conditions[] = "(rule_type = 'brand' AND entity_id = :brand_id)";
-            $params[':brand_id'] = $brandId;
-        }
-        
-        $conditions[] = "(rule_type = 'global')";
-
-        if (!empty($conditions)) {
-            $sql .= " AND (" . implode(' OR ', $conditions) . ")";
+            $brandRule = $ruleMaps['brand'][intval($brandId)] ?? null;
+            if ($brandRule !== null) {
+                $result = $brandRule;
+                $this->markupCache[$cacheKey] = $result;
+                return $result;
+            }
         }
 
-        $sql .= " ORDER BY 
-                 CASE WHEN account_type = :account_type_order THEN 0 ELSE 1 END,
-                 CASE 
-                    WHEN rule_type = 'product' THEN 4
-                    WHEN rule_type = 'category' THEN 3
-                    WHEN rule_type = 'brand' THEN 2
-                    WHEN rule_type = 'global' THEN 1
-                    ELSE 0
-                 END DESC,
-                 priority DESC, id DESC LIMIT 1";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-        $rule = $stmt->fetch();
-
-        if ($rule) {
-            $result = [
-                'type' => $rule['markup_type'],
-                'value' => floatval($rule['markup_value'])
-            ];
-            $this->markupCache[$cacheKey] = $result;
-            return $result;
-        }
-
-        // Default markup
-        $result = [
-            'type' => 'percentage',
-            'value' => floatval(Env::get('DEFAULT_MARKUP_PERCENTAGE', 15.0))
-        ];
         $this->markupCache[$cacheKey] = $result;
         return $result;
+    }
+
+    private function getRuleMapsForAccount($accountType)
+    {
+        $cacheKey = strtolower((string) $accountType);
+        if (isset($this->ruleMapCache[$cacheKey])) {
+            return $this->ruleMapCache[$cacheKey];
+        }
+
+        $maps = [
+            'product' => [],
+            'category' => [],
+            'brand' => [],
+            'global' => [
+                'type' => 'percentage',
+                'value' => floatval(Env::get('DEFAULT_MARKUP_PERCENTAGE', 15.0))
+            ],
+        ];
+
+        $sql = "SELECT rule_type, entity_id, markup_type, markup_value
+                FROM pricing_rules
+                WHERE is_active = 1
+                AND (account_type = :account_type OR account_type IS NULL)
+                AND rule_type IN ('product', 'category', 'brand', 'global')
+                ORDER BY
+                    CASE WHEN account_type = :account_type THEN 0 ELSE 1 END,
+                    priority DESC,
+                    id DESC";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':account_type' => $accountType,
+        ]);
+
+        $rows = $stmt->fetchAll();
+        foreach ($rows as $row) {
+            $ruleType = (string) ($row['rule_type'] ?? '');
+            $ruleValue = [
+                'type' => (string) ($row['markup_type'] ?? 'percentage'),
+                'value' => floatval($row['markup_value'] ?? 0),
+            ];
+
+            if ($ruleType === 'global') {
+                $maps['global'] = $ruleValue;
+                continue;
+            }
+
+            $entityId = intval($row['entity_id'] ?? 0);
+            if ($entityId <= 0) {
+                continue;
+            }
+
+            if (!isset($maps[$ruleType][$entityId])) {
+                $maps[$ruleType][$entityId] = $ruleValue;
+            }
+        }
+
+        $this->ruleMapCache[$cacheKey] = $maps;
+        return $maps;
     }
 
     /**

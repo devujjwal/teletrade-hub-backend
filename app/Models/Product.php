@@ -149,8 +149,8 @@ class Product
     public function count($filters = [])
     {
         $params = [];
-        // Use product_list_view to match the same structure as getAll()
-        $sql = "SELECT COUNT(*) FROM product_list_view WHERE 1=1";
+        // Count directly from products table to avoid unnecessary joins used by product_list_view.
+        $sql = "SELECT COUNT(*) FROM products WHERE 1=1";
 
         if (isset($filters['category_id']) && $filters['category_id'] > 0) {
             $sql .= " AND category_id = :category_id";
@@ -174,6 +174,30 @@ class Product
         if (isset($filters['product_source']) && ($filters['product_source'] === 'vendor' || $filters['product_source'] === 'own')) {
             $sql .= " AND product_source = :product_source";
             $params[':product_source'] = $filters['product_source']; // Store value for binding
+        }
+        if (!empty($filters['min_price'])) {
+            $sql .= " AND price >= :min_price";
+            $params[':min_price'] = $filters['min_price'];
+        }
+        if (!empty($filters['max_price'])) {
+            $sql .= " AND price <= :max_price";
+            $params[':max_price'] = $filters['max_price'];
+        }
+        if (!empty($filters['color'])) {
+            $sql .= " AND color = :color";
+            $params[':color'] = $filters['color'];
+        }
+        if (!empty($filters['storage'])) {
+            $sql .= " AND storage = :storage";
+            $params[':storage'] = $filters['storage'];
+        }
+        if (!empty($filters['ram'])) {
+            $sql .= " AND ram = :ram";
+            $params[':ram'] = $filters['ram'];
+        }
+        if (!empty($filters['warranty_id'])) {
+            $sql .= " AND warranty_id = :warranty_id";
+            $params[':warranty_id'] = intval($filters['warranty_id']);
         }
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';

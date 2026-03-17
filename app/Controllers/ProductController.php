@@ -135,7 +135,9 @@ class ProductController
             'account_type' => $viewer['account_type'] ?? 'customer',
             'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
         ], $cacheTags);
-        $cacheTtl = $this->apiCache->getTtlProducts();
+        $cacheTtl = $this->isPageOneWarmPath($page, $limit, $filters, $includeTotal, $includeFilters, $viewer)
+            ? $this->apiCache->getTtlProductsPage1Warm()
+            : $this->apiCache->getTtlProducts();
         $this->serveCached($cacheKey, $cacheTtl);
 
         // Get products
@@ -357,13 +359,21 @@ class ProductController
      */
     private function applyViewerPricing(array $products, array $viewer)
     {
+        if (empty($products)) {
+            return $products;
+        }
+
+        if (!empty($viewer['show_base_price'])) {
+            foreach ($products as &$product) {
+                $basePrice = floatval($product['base_price'] ?? 0);
+                $product['price'] = round($basePrice, 2);
+            }
+            unset($product);
+            return $products;
+        }
+
         foreach ($products as &$product) {
             $basePrice = floatval($product['base_price'] ?? 0);
-            if (!empty($viewer['show_base_price'])) {
-                $product['price'] = round($basePrice, 2);
-                continue;
-            }
-
             $product['price'] = $this->pricingService->calculatePrice(
                 $basePrice,
                 $product['category_id'] ?? null,
@@ -375,6 +385,29 @@ class ProductController
         unset($product);
 
         return $products;
+    }
+
+    /**
+     * Keep page-1 catalog key warm longer to avoid cold windows between prewarm runs.
+     */
+    private function isPageOneWarmPath($page, $limit, array $filters, $includeTotal, $includeFilters, array $viewer)
+    {
+        if (intval($page) !== 1 || intval($limit) !== 20) {
+            return false;
+        }
+        if (!$includeTotal || $includeFilters) {
+            return false;
+        }
+        if (!empty($viewer['is_authenticated']) || !empty($viewer['show_base_price'])) {
+            return false;
+        }
+
+        // Warm path only when no custom filters/sorting/search are used.
+        if (count($filters) !== 1) {
+            return false;
+        }
+
+        return isset($filters['is_available']) && intval($filters['is_available']) === 1;
     }
 
     /**
