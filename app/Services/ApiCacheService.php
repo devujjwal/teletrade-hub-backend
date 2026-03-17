@@ -56,6 +56,11 @@ class ApiCacheService
         return max(1, intval(Env::get('API_CACHE_TTL_TAXONOMY', 1800)));
     }
 
+    public function getTtlTracking()
+    {
+        return max(1, intval(Env::get('API_CACHE_TTL_TRACKING', 60)));
+    }
+
     public function buildKey($namespace, array $params = [], array $context = [], array $tags = [])
     {
         if (!$this->enabled) {

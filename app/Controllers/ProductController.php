@@ -213,18 +213,31 @@ class ProductController
                 Response::error('Search query is required', 400);
             }
 
+            $viewer = $this->resolveViewerContext();
             $filters = ['search' => $query];
             // By default, only show available products (in stock)
             if (!isset($_GET['is_available']) || $_GET['is_available'] !== 'all') {
                 $filters['is_available'] = 1;
             }
+            $cacheKey = $this->apiCache->buildKey('products:search', [
+                'q' => $query,
+                'lang' => $lang,
+                'page' => $page,
+                'limit' => $limit,
+                'is_available' => $filters['is_available'] ?? 'all',
+            ], [
+                'account_type' => $viewer['account_type'] ?? 'customer',
+                'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
+            ], ['products']);
+            $cacheTtl = $this->apiCache->getTtlProducts();
+            $this->serveCached($cacheKey, $cacheTtl);
+
             $products = $this->productModel->getAll($filters, $page, $limit, $lang);
-            $viewer = $this->resolveViewerContext();
             $products = $this->applyViewerPricing($products, $viewer);
             $total = $this->productModel->count($filters);
 
             // Return empty results instead of error when no products found
-            Response::success([
+            $this->respondSuccess([
                 'products' => $products,
                 'pagination' => [
                     'page' => $page,
@@ -234,7 +247,7 @@ class ProductController
                 ],
                 'query' => $query,
                 'language' => LanguageMiddleware::getLanguageInfo()
-            ]);
+            ], 'Success', 200, $cacheKey, $cacheTtl);
         } catch (Exception $e) {
             // SECURITY: Sanitize error messages in production
             $isDebug = Env::get('APP_DEBUG', 'false') === 'true';
@@ -510,12 +523,18 @@ class ProductController
      */
     public function languages()
     {
+        $cacheKey = $this->apiCache->buildKey('products:languages', [
+            'lang' => LanguageMiddleware::getCurrentLanguage(),
+        ], [], ['languages']);
+        $cacheTtl = $this->apiCache->getTtlTaxonomy();
+        $this->serveCached($cacheKey, $cacheTtl);
+
         $languages = Language::getAllLanguages();
         
-        Response::success([
+        $this->respondSuccess([
             'languages' => $languages,
             'current' => LanguageMiddleware::getLanguageInfo()
-        ]);
+        ], 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     private function serveCached($cacheKey, $ttl)

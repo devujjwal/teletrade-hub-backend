@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../Services/ShippingService.php';
 require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Middlewares/AuthMiddleware.php';
+require_once __DIR__ . '/../Services/ApiCacheService.php';
 
 /**
  * Shipping Controller
@@ -12,11 +13,13 @@ class ShippingController
 {
     private $shippingService;
     private $orderModel;
+    private $apiCache;
 
     public function __construct()
     {
         $this->shippingService = new ShippingService();
         $this->orderModel = new Order();
+        $this->apiCache = new ApiCacheService();
     }
 
     /**
@@ -30,8 +33,14 @@ class ShippingController
         }
 
         try {
+            $cacheKey = $this->apiCache->buildKey('shipping:track', [
+                'tracking_number' => $trackingNumber,
+            ], [], ['shipping_track:' . strtolower((string) $trackingNumber)]);
+            $cacheTtl = $this->apiCache->getTtlTracking();
+            $this->serveCached($cacheKey, $cacheTtl);
+
             $tracking = $this->shippingService->trackPackage($trackingNumber);
-            Response::success($tracking);
+            $this->respondSuccess($tracking, 'Success', 200, $cacheKey, $cacheTtl);
         } catch (Exception $e) {
             Response::error($e->getMessage(), 500);
         }
@@ -191,5 +200,50 @@ class ShippingController
         } catch (Exception $e) {
             Response::error($e->getMessage(), 500);
         }
+    }
+
+    private function serveCached($cacheKey, $ttl)
+    {
+        if (!$this->apiCache->isEnabled() || $cacheKey === '') {
+            return;
+        }
+
+        $entry = $this->apiCache->get($cacheKey);
+        if (!$entry) {
+            return;
+        }
+
+        http_response_code(intval($entry['status_code'] ?? 200));
+        header('Content-Type: ' . ($entry['content_type'] ?? 'application/json; charset=utf-8'));
+        header('Cache-Control: public, max-age=' . intval($ttl) . ', s-maxage=' . intval($ttl));
+        header('X-API-Cache: HIT');
+        echo (string) ($entry['body'] ?? '');
+        exit;
+    }
+
+    private function respondSuccess($data = null, $message = 'Success', $statusCode = 200, $cacheKey = '', $ttl = 0)
+    {
+        $payload = [
+            'success' => true,
+            'message' => $message,
+            'data' => $data,
+        ];
+        $json = json_encode(
+            $payload,
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
+        );
+
+        http_response_code($statusCode);
+        header('Content-Type: application/json; charset=utf-8');
+        if ($this->apiCache->isEnabled() && $cacheKey !== '' && $statusCode >= 200 && $statusCode < 300) {
+            header('Cache-Control: public, max-age=' . intval($ttl) . ', s-maxage=' . intval($ttl));
+            header('X-API-Cache: MISS');
+            $this->apiCache->put($cacheKey, $json, $statusCode, 'application/json; charset=utf-8', $ttl);
+        } else {
+            header('X-API-Cache: BYPASS');
+        }
+
+        echo $json;
+        exit;
     }
 }
