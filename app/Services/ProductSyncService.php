@@ -1108,9 +1108,6 @@ class ProductSyncService
      */
     private function markStaleInProgressSyncAsFailed()
     {
-        $thresholdTimestamp = time() - (self::SYNC_STALE_MINUTES * 60);
-        $thresholdDate = date('Y-m-d H:i:s', $thresholdTimestamp);
-
         if (Database::isPostgres()) {
             $sql = "UPDATE vendor_sync_log
                     SET status = 'failed',
@@ -1119,7 +1116,7 @@ class ProductSyncService
                         duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::INT
                     WHERE status = 'in_progress'
                       AND completed_at IS NULL
-                      AND started_at < :threshold";
+                      AND started_at < (NOW() - INTERVAL '" . self::SYNC_STALE_MINUTES . " minutes')";
         } else {
             $sql = "UPDATE vendor_sync_log
                     SET status = 'failed',
@@ -1128,11 +1125,11 @@ class ProductSyncService
                         duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW())
                     WHERE status = 'in_progress'
                       AND completed_at IS NULL
-                      AND started_at < :threshold";
+                      AND started_at < DATE_SUB(NOW(), INTERVAL " . self::SYNC_STALE_MINUTES . " MINUTE)";
         }
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':threshold' => $thresholdDate]);
+        $stmt->execute();
     }
 
     /**
