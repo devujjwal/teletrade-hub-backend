@@ -173,10 +173,11 @@ class AdminController
             throw new Exception('Background sync runner not found');
         }
 
+        $phpBinary = $this->resolveCliPhpBinary();
         $payload = base64_encode(json_encode($languageIds ?? []));
         $command = sprintf(
-            '%s %s %s > /dev/null 2>&1 &',
-            escapeshellarg(PHP_BINARY),
+            'nohup %s %s %s > /dev/null 2>&1 &',
+            escapeshellarg($phpBinary),
             escapeshellarg($scriptPath),
             escapeshellarg($payload)
         );
@@ -186,6 +187,36 @@ class AdminController
         if ($exitCode !== 0) {
             throw new Exception('Failed to start background sync process');
         }
+    }
+
+    /**
+     * Resolve a CLI PHP binary for detached background runs.
+     */
+    private function resolveCliPhpBinary()
+    {
+        $candidates = [];
+        if (defined('PHP_BINARY') && !empty(PHP_BINARY)) {
+            $candidates[] = PHP_BINARY;
+        }
+        $candidates[] = '/usr/bin/php';
+        $candidates[] = '/usr/local/bin/php';
+        $candidates[] = '/usr/local/bin/ea-php83';
+
+        foreach ($candidates as $candidate) {
+            if (!$candidate || !is_string($candidate)) {
+                continue;
+            }
+            if (!is_file($candidate) || !is_executable($candidate)) {
+                continue;
+            }
+
+            $isCli = @shell_exec(escapeshellarg($candidate) . ' -r ' . escapeshellarg('echo PHP_SAPI;'));
+            if (is_string($isCli) && stripos(trim($isCli), 'cli') !== false) {
+                return $candidate;
+            }
+        }
+
+        return '/usr/bin/php';
     }
 
     /**
