@@ -31,6 +31,7 @@ class ProductSyncService
     private $progressTotalUnits = 0;
     private $progressProcessedUnits = 0;
     private $progressLastPersistedAt = 0;
+    private $selectedLanguageCount = 1;
 
     public function __construct()
     {
@@ -66,6 +67,7 @@ class ProductSyncService
             if (!in_array(1, $languageIds, true)) {
                 array_unshift($languageIds, 1);
             }
+            $this->selectedLanguageCount = max(1, count($languageIds));
             
             $stats = [
                 'synced' => 0,
@@ -92,17 +94,15 @@ class ProductSyncService
             $stats['languages']['en'] = $baseStats;
             
             $products = $baseStats['products'] ?? [];
-            $baseProductCount = count($products);
-
-            // Progress units: each product processed in each selected language + final disable step.
-            $this->progressTotalUnits = max(1, ($baseProductCount * count($languageIds)) + 1);
-            $this->progressProcessedUnits = min($this->progressProcessedUnits, $this->progressTotalUnits);
-            $this->persistProgressMeta([
-                'phase' => 'base_language_completed',
-                'language' => 'en',
-                'processed' => $this->progressProcessedUnits,
-                'total' => $this->progressTotalUnits
-            ], true);
+            if ($this->progressTotalUnits > 0) {
+                $this->progressProcessedUnits = min($this->progressProcessedUnits, $this->progressTotalUnits);
+                $this->persistProgressMeta([
+                    'phase' => 'base_language_completed',
+                    'language' => 'en',
+                    'processed' => $this->progressProcessedUnits,
+                    'total' => $this->progressTotalUnits
+                ], true);
+            }
 
             // Then sync other languages to populate translation columns
             foreach ($languageIds as $langId) {
@@ -169,6 +169,16 @@ class ProductSyncService
         $products = $stockData['stock'];
         $productCount = is_array($products) ? count($products) : 0;
         echo "Found {$productCount} products in vendor response\n";
+
+        if ($languageId == 1 && $productCount > 0 && $this->progressTotalUnits <= 0) {
+            $this->progressTotalUnits = max(1, ($productCount * $this->selectedLanguageCount) + 1);
+            $this->persistProgressMeta([
+                'phase' => 'syncing_base_language',
+                'language' => 'en',
+                'processed' => $this->progressProcessedUnits,
+                'total' => $this->progressTotalUnits
+            ], true);
+        }
         
         if ($productCount == 0) {
             echo "WARNING: No products to sync!\n";
