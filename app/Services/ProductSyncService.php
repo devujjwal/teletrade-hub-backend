@@ -17,6 +17,7 @@ class ProductSyncService
 {
     private const SYNC_LOG_RETENTION_DAYS = 180;
     private const MAX_SYNC_LOG_ROWS = 1000;
+    private const SYNC_STALE_MINUTES = 30;
 
     private $vendorApi;
     private $productModel;
@@ -27,6 +28,9 @@ class ProductSyncService
     private $syncLogId;
     private $contentInvalidation;
     private static $syncRetentionPruned = false;
+    private $progressTotalUnits = 0;
+    private $progressProcessedUnits = 0;
+    private $progressLastPersistedAt = 0;
 
     public function __construct()
     {
@@ -54,6 +58,14 @@ class ProductSyncService
             if ($languageIds === null) {
                 $languageIds = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // All except 0 (default)
             }
+
+            $languageIds = array_values(array_unique(array_map('intval', $languageIds)));
+            if (empty($languageIds)) {
+                $languageIds = [1];
+            }
+            if (!in_array(1, $languageIds, true)) {
+                array_unshift($languageIds, 1);
+            }
             
             $stats = [
                 'synced' => 0,
@@ -62,6 +74,14 @@ class ProductSyncService
                 'disabled' => 0,
                 'languages' => []
             ];
+
+            $this->persistProgressMeta([
+                'phase' => 'initializing',
+                'language' => 'en',
+                'processed' => 0,
+                'total' => 0,
+                'percent' => 0
+            ], true);
 
             // First, sync in English (base language) to create/update products
             echo "Syncing products in English (base language)...\n";
@@ -72,6 +92,17 @@ class ProductSyncService
             $stats['languages']['en'] = $baseStats;
             
             $products = $baseStats['products'] ?? [];
+            $baseProductCount = count($products);
+
+            // Progress units: each product processed in each selected language + final disable step.
+            $this->progressTotalUnits = max(1, ($baseProductCount * count($languageIds)) + 1);
+            $this->progressProcessedUnits = min($this->progressProcessedUnits, $this->progressTotalUnits);
+            $this->persistProgressMeta([
+                'phase' => 'base_language_completed',
+                'language' => 'en',
+                'processed' => $this->progressProcessedUnits,
+                'total' => $this->progressTotalUnits
+            ], true);
 
             // Then sync other languages to populate translation columns
             foreach ($languageIds as $langId) {
@@ -92,6 +123,10 @@ class ProductSyncService
             }
 
             // Disable products that are no longer in vendor stock
+            $this->advanceProgress(1, [
+                'phase' => 'finalizing',
+                'language' => 'all'
+            ], true);
             $stats['disabled'] = $this->disableUnavailableProducts($products);
 
             $this->completeSyncLog('completed', $stats);
@@ -169,6 +204,11 @@ class ProductSyncService
                     echo "Stack trace: " . $e->getTraceAsString() . "\n";
                 }
                 continue;
+            } finally {
+                $this->advanceProgress(1, [
+                    'phase' => 'syncing_base_language',
+                    'language' => 'en'
+                ]);
             }
         }
         
@@ -209,6 +249,10 @@ class ProductSyncService
             $sku = $baseProduct['sku'] ?? null;
             if (!$sku || !isset($productMap[$sku])) {
                 $stats['skipped']++;
+                $this->advanceProgress(1, [
+                    'phase' => 'syncing_translations',
+                    'language' => $langCode
+                ]);
                 continue;
             }
 
@@ -270,6 +314,11 @@ class ProductSyncService
             } catch (Exception $e) {
                 error_log("Failed to update translation for SKU {$sku} in {$langCode}: " . $e->getMessage());
                 $stats['skipped']++;
+            } finally {
+                $this->advanceProgress(1, [
+                    'phase' => 'syncing_translations',
+                    'language' => $langCode
+                ]);
             }
         }
 
@@ -990,12 +1039,123 @@ class ProductSyncService
     }
 
     /**
+     * Persist in-progress metadata to vendor_sync_log.error_message as JSON.
+     */
+    private function persistProgressMeta(array $meta = [], $force = false)
+    {
+        if (!$this->syncLogId) {
+            return;
+        }
+
+        $now = time();
+        if (
+            !$force &&
+            $this->progressProcessedUnits > 0 &&
+            ($this->progressProcessedUnits % 25 !== 0) &&
+            ($now - $this->progressLastPersistedAt) < 5
+        ) {
+            return;
+        }
+
+        $processed = (int)($meta['processed'] ?? $this->progressProcessedUnits);
+        $total = (int)($meta['total'] ?? $this->progressTotalUnits);
+        $total = max(1, $total);
+        $processed = max(0, min($processed, $total));
+        $percent = (float)($meta['percent'] ?? (($processed / $total) * 100));
+        $percent = max(0, min(100, $percent));
+
+        $payload = [
+            'type' => 'progress',
+            'phase' => (string)($meta['phase'] ?? 'running'),
+            'language' => (string)($meta['language'] ?? 'all'),
+            'processed' => $processed,
+            'total' => $total,
+            'percent' => round($percent, 2),
+            'updated_at' => date('c')
+        ];
+
+        $sql = "UPDATE vendor_sync_log
+                SET error_message = :progress_json
+                WHERE id = :id AND status = 'in_progress'";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':id' => $this->syncLogId,
+            ':progress_json' => json_encode($payload)
+        ]);
+
+        $this->progressLastPersistedAt = $now;
+    }
+
+    /**
+     * Increase in-progress processed units and persist progress metadata.
+     */
+    private function advanceProgress($units = 1, array $meta = [], $force = false)
+    {
+        $this->progressProcessedUnits += max(1, (int)$units);
+
+        if ($this->progressTotalUnits > 0 && $this->progressProcessedUnits > $this->progressTotalUnits) {
+            $this->progressProcessedUnits = $this->progressTotalUnits;
+        }
+
+        $this->persistProgressMeta(array_merge($meta, [
+            'processed' => $this->progressProcessedUnits,
+            'total' => max(1, $this->progressTotalUnits ?: $this->progressProcessedUnits)
+        ]), $force);
+    }
+
+    /**
+     * Mark stale in-progress runs as failed so UI does not stay stuck forever.
+     */
+    private function markStaleInProgressSyncAsFailed()
+    {
+        $thresholdTimestamp = time() - (self::SYNC_STALE_MINUTES * 60);
+        $thresholdDate = date('Y-m-d H:i:s', $thresholdTimestamp);
+
+        if (Database::isPostgres()) {
+            $sql = "UPDATE vendor_sync_log
+                    SET status = 'failed',
+                        error_message = 'Sync process appears to have stopped unexpectedly (timeout/interrupted).',
+                        completed_at = NOW(),
+                        duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::INT
+                    WHERE status = 'in_progress'
+                      AND completed_at IS NULL
+                      AND started_at < :threshold";
+        } else {
+            $sql = "UPDATE vendor_sync_log
+                    SET status = 'failed',
+                        error_message = 'Sync process appears to have stopped unexpectedly (timeout/interrupted).',
+                        completed_at = NOW(),
+                        duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW())
+                    WHERE status = 'in_progress'
+                      AND completed_at IS NULL
+                      AND started_at < :threshold";
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':threshold' => $thresholdDate]);
+    }
+
+    /**
      * Get last sync status
      */
     public function getLastSyncStatus()
     {
+        $this->markStaleInProgressSyncAsFailed();
         $sql = "SELECT * FROM vendor_sync_log ORDER BY started_at DESC LIMIT 1";
         $stmt = $this->db->query($sql);
-        return $stmt->fetch();
+        $row = $stmt->fetch();
+        if (!$row) {
+            return $row;
+        }
+
+        if (($row['status'] ?? '') === 'in_progress' && !empty($row['error_message'])) {
+            $decoded = json_decode((string)$row['error_message'], true);
+            if (is_array($decoded) && ($decoded['type'] ?? null) === 'progress') {
+                $row['progress'] = $decoded;
+                $row['error_message'] = null;
+            }
+        }
+
+        return $row;
     }
 }
