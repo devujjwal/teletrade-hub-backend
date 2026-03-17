@@ -95,7 +95,8 @@ class Product
         // Search query
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';
-            $sql .= " AND (name LIKE :search_name OR sku LIKE :search_sku OR ean LIKE :search_ean)";
+            $likeOperator = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $sql .= " AND (name {$likeOperator} :search_name OR sku {$likeOperator} :search_sku OR ean {$likeOperator} :search_ean)";
             $params[':search_name'] = $searchValue;
             $params[':search_sku'] = $searchValue;
             $params[':search_ean'] = $searchValue;
@@ -201,7 +202,8 @@ class Product
         }
         if (!empty($filters['search'])) {
             $searchValue = '%' . $filters['search'] . '%';
-            $sql .= " AND (name LIKE :search_name OR sku LIKE :search_sku OR ean LIKE :search_ean)";
+            $likeOperator = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $sql .= " AND (name {$likeOperator} :search_name OR sku {$likeOperator} :search_sku OR ean {$likeOperator} :search_ean)";
             $params[':search_name'] = $searchValue;
             $params[':search_sku'] = $searchValue;
             $params[':search_ean'] = $searchValue;
