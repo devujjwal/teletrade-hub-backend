@@ -43,6 +43,12 @@ class ProductController
         $lang = LanguageMiddleware::getCurrentLanguage();
         $page = max(1, intval($_GET['page'] ?? 1));
         $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $includeTotal = !isset($_GET['include_total']) || strval($_GET['include_total']) !== '0';
+        $includeFilters = !isset($_GET['include_filters']) || strval($_GET['include_filters']) !== '0';
+        if (isset($_GET['lite']) && (strval($_GET['lite']) === '1' || strtolower(strval($_GET['lite'])) === 'true')) {
+            $includeTotal = false;
+            $includeFilters = false;
+        }
 
         // Build filters
         $filters = [];
@@ -123,6 +129,8 @@ class ProductController
             'page' => $page,
             'limit' => $limit,
             'filters' => $filters,
+            'include_total' => $includeTotal ? 1 : 0,
+            'include_filters' => $includeFilters ? 1 : 0,
         ], [
             'account_type' => $viewer['account_type'] ?? 'customer',
             'show_base_price' => !empty($viewer['show_base_price']) ? 1 : 0,
@@ -133,22 +141,24 @@ class ProductController
         // Get products
         $products = $this->productModel->getAll($filters, $page, $limit, $lang);
         $products = $this->applyViewerPricing($products, $viewer);
-        $total = $this->productModel->count($filters);
+        $total = $includeTotal ? $this->productModel->count($filters) : count($products);
 
-        // Get filter options
-        $filterOptions = $this->productModel->getFilterOptions();
-
-        $this->respondSuccess([
+        $responseData = [
             'products' => $products,
             'pagination' => [
                 'page' => $page,
                 'limit' => $limit,
                 'total' => $total,
-                'pages' => ceil($total / $limit)
+                'pages' => $includeTotal ? ceil($total / $limit) : max(1, $page)
             ],
-            'filters' => $filterOptions,
             'language' => LanguageMiddleware::getLanguageInfo()
-        ], 'Success', 200, $cacheKey, $cacheTtl);
+        ];
+
+        if ($includeFilters) {
+            $responseData['filters'] = $this->productModel->getFilterOptions();
+        }
+
+        $this->respondSuccess($responseData, 'Success', 200, $cacheKey, $cacheTtl);
     }
 
     /**
