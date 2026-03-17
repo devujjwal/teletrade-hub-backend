@@ -5,6 +5,7 @@ require_once __DIR__ . '/../Models/Category.php';
 require_once __DIR__ . '/../Models/Brand.php';
 require_once __DIR__ . '/../Services/PricingService.php';
 require_once __DIR__ . '/../Services/ApiCacheService.php';
+require_once __DIR__ . '/../Services/DiagnosticsLoggerService.php';
 require_once __DIR__ . '/../Middlewares/LanguageMiddleware.php';
 if (!class_exists('Env')) {
     require_once __DIR__ . '/../Config/env.php';
@@ -528,6 +529,9 @@ class ProductController
             return;
         }
 
+        if (class_exists('DiagnosticsLoggerService')) {
+            DiagnosticsLoggerService::log('api_cache.hit', ['key' => $cacheKey]);
+        }
         http_response_code(intval($entry['status_code'] ?? 200));
         header('Content-Type: ' . ($entry['content_type'] ?? 'application/json; charset=utf-8'));
         header('Cache-Control: public, max-age=' . intval($ttl) . ', s-maxage=' . intval($ttl));
@@ -556,6 +560,9 @@ class ProductController
             header('Cache-Control: public, max-age=' . intval($ttl) . ', s-maxage=' . intval($ttl));
             header('X-API-Cache: MISS');
             $this->apiCache->put($cacheKey, $json, $statusCode, 'application/json; charset=utf-8', $ttl);
+            if (class_exists('DiagnosticsLoggerService')) {
+                DiagnosticsLoggerService::log('api_cache.store', ['key' => $cacheKey, 'ttl' => intval($ttl)]);
+            }
         } else {
             header('X-API-Cache: BYPASS');
         }

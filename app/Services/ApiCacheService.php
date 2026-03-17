@@ -24,7 +24,15 @@ class ApiCacheService
 
         $this->enabled = strtolower((string) Env::get('API_CACHE_ENABLED', 'true')) === 'true';
         $configuredDir = trim((string) Env::get('API_CACHE_DIR', ''));
-        $this->cacheDir = $configuredDir !== '' ? $configuredDir : self::DEFAULT_DIR;
+        if ($configuredDir !== '') {
+            if (strpos($configuredDir, '/') === 0) {
+                $this->cacheDir = $configuredDir;
+            } else {
+                $this->cacheDir = realpath(__DIR__ . '/../../') . '/' . ltrim($configuredDir, '/');
+            }
+        } else {
+            $this->cacheDir = self::DEFAULT_DIR;
+        }
         $this->tagVersionFile = rtrim($this->cacheDir, '/') . '/' . self::TAG_VERSION_FILE;
 
         if ($this->enabled) {
@@ -157,7 +165,11 @@ class ApiCacheService
     private function ensureDirectory()
     {
         if (!is_dir($this->cacheDir)) {
-            @mkdir($this->cacheDir, 0775, true);
+            if (!@mkdir($this->cacheDir, 0775, true) && !is_dir($this->cacheDir)) {
+                DiagnosticsLoggerService::log('api_cache.mkdir_failed', [
+                    'cache_dir' => $this->cacheDir,
+                ]);
+            }
         }
     }
 
