@@ -115,8 +115,8 @@ server {
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
     server_tokens off;
 
-    # Client limits
-    client_max_body_size 10M;
+    # Client limits (merchant registration can include up to 5 x 10MB documents)
+    client_max_body_size 60M;
     client_body_timeout 30s;
 
     # PHP processing
@@ -262,11 +262,11 @@ display_errors = Off
 log_errors = On
 error_log = /var/log/php/error.log
 
-; Resource Limits
+; Resource Limits (allow multipart form body overhead for merchant registration)
 max_execution_time = 300
 max_input_time = 300
 memory_limit = 256M
-post_max_size = 10M
+post_max_size = 60M
 upload_max_filesize = 10M
 
 ; Session Security

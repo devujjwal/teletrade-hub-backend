@@ -32,6 +32,28 @@ class AuthController
     {
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
         $isMultipart = stripos($contentType, 'multipart/form-data') !== false;
+        $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+        $postMaxSizeBytes = $this->parsePhpSizeToBytes((string)ini_get('post_max_size'));
+
+        if (
+            $isMultipart &&
+            $contentLength > 0 &&
+            empty($_POST) &&
+            empty($_FILES) &&
+            $postMaxSizeBytes !== null &&
+            $contentLength > $postMaxSizeBytes
+        ) {
+            $postMaxSizeMb = round($postMaxSizeBytes / (1024 * 1024), 2);
+            Response::error(
+                'Uploaded payload is too large. Please reduce document size or contact support.',
+                413,
+                [
+                    'general' => ["Maximum total upload size is {$postMaxSizeMb}MB."],
+                    'max_total_upload_size_mb' => [(string)$postMaxSizeMb]
+                ]
+            );
+        }
+
         $input = $isMultipart
             ? $_POST
             : json_decode(file_get_contents('php://input'), true);
@@ -322,6 +344,40 @@ class AuthController
             'mime' => $mimeType,
             'extension' => $allowedMimeToExt[$mimeType]
         ];
+    }
+
+    /**
+     * Convert php.ini shorthand size values (e.g. 8M, 1G) to bytes
+     */
+    private function parsePhpSizeToBytes($size)
+    {
+        $trimmed = trim((string)$size);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (!preg_match('/^(\d+(?:\.\d+)?)\s*([KMG]?)$/i', $trimmed, $matches)) {
+            return null;
+        }
+
+        $value = (float)$matches[1];
+        $unit = strtoupper($matches[2] ?? '');
+
+        switch ($unit) {
+            case 'G':
+                $value *= 1024;
+                // fallthrough
+            case 'M':
+                $value *= 1024;
+                // fallthrough
+            case 'K':
+                $value *= 1024;
+                break;
+            default:
+                break;
+        }
+
+        return (int)round($value);
     }
 
     /**
