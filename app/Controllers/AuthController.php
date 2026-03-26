@@ -48,9 +48,14 @@ class AuthController
             $input['phone'] = null;
         }
 
-        // SECURITY: Rate limiting to prevent registration spam
+        // SECURITY: Rate limiting to prevent registration spam.
+        // Include email in the identifier to reduce false lockouts for shared IPs/NAT environments.
         $clientIp = RateLimitMiddleware::getClientIdentifier();
-        $this->rateLimiter->enforce($clientIp, 'customer_register', 3, 3600); // 3 attempts per hour
+        $normalizedEmailForRateLimit = strtolower((string)($input['email'] ?? ''));
+        $rateLimitIdentifier = $normalizedEmailForRateLimit !== ''
+            ? $clientIp . '|' . $normalizedEmailForRateLimit
+            : $clientIp;
+        $this->rateLimiter->enforce($rateLimitIdentifier, 'customer_register', 8, 3600); // 8 attempts per hour per IP+email
 
         $accountType = $input['account_type'] ?? 'customer';
 
