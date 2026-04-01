@@ -109,7 +109,7 @@ class OrderController
                     ':city' => Sanitizer::string($input['billing_address']['city']),
                     ':state' => Sanitizer::string($input['billing_address']['state'] ?? ''),
                     ':postal_code' => Sanitizer::string($input['billing_address']['postal_code']),
-                    ':country' => strtoupper(substr($input['billing_address']['country'], 0, 2)),
+                    ':country' => Sanitizer::string($input['billing_address']['country']),
                     ':phone' => Sanitizer::string($input['billing_address']['phone']),
                     ':is_default' => 0
                 ];
@@ -139,7 +139,7 @@ class OrderController
                     ':city' => Sanitizer::string($input['shipping_address']['city']),
                     ':state' => Sanitizer::string($input['shipping_address']['state'] ?? ''),
                     ':postal_code' => Sanitizer::string($input['shipping_address']['postal_code']),
-                    ':country' => strtoupper(substr($input['shipping_address']['country'], 0, 2)),
+                    ':country' => Sanitizer::string($input['shipping_address']['country']),
                     ':phone' => Sanitizer::string($input['shipping_address']['phone']),
                     ':is_default' => 0
                 ];
