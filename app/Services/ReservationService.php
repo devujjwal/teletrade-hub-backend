@@ -67,7 +67,12 @@ class ReservationService
                 $this->unreserveProduct($reservation['id']);
             }
             
-            throw new Exception('Failed to reserve all vendor products: ' . json_encode($errors));
+            $formattedErrors = array_map(function ($error) {
+                $productId = isset($error['product_id']) ? 'Product ' . $error['product_id'] . ': ' : '';
+                return $productId . ($error['error'] ?? 'Reservation failed');
+            }, $errors);
+
+            throw new Exception('Failed to reserve all vendor products: ' . implode('; ', $formattedErrors));
         }
 
         return $reservations;
@@ -143,7 +148,12 @@ class ReservationService
                     'status' => 'reserved'
                 ];
             } else {
-                throw new Exception($vendorResponse['message'] ?? 'Reservation failed');
+                $vendorError = $vendorResponse['message']
+                    ?? $vendorResponse['error_msg']
+                    ?? $vendorResponse['error']
+                    ?? 'Reservation failed';
+
+                throw new Exception((string) $vendorError);
             }
         } catch (Exception $e) {
             // Mark reservation as failed

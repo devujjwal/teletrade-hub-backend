@@ -151,7 +151,7 @@ class OrderService
                 }
             }
 
-            // Reserve vendor products immediately on order creation (no payment flow).
+            // Reserve vendor products immediately on order creation.
             $reservations = [];
             $ownItemsProcessed = [];
             $errors = [];
@@ -200,7 +200,8 @@ class OrderService
                 foreach ($ownItemsProcessed as $processedItem) {
                     $this->productModel->releaseStock($processedItem['product_id'], $processedItem['quantity']);
                 }
-                throw new Exception('Failed to reserve vendor products. Order was not created.');
+                $vendorErrorMessage = $errors[0]['error'] ?? 'Reservation failed';
+                throw new Exception('Failed to reserve vendor products. ' . $vendorErrorMessage);
             }
 
             if (!empty($vendorItems) && !empty($ownItems)) {

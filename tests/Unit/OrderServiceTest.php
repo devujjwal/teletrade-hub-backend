@@ -35,11 +35,12 @@ class OrderServiceTest extends TestCase
         
         // Insert test products
         $this->db->exec("
-            INSERT INTO products (id, vendor_article_id, sku, name, category_id, brand_id, base_price, price, available_quantity, is_available)
+            INSERT INTO products (id, product_source, vendor_article_id, sku, name, category_id, brand_id, base_price, price, available_quantity, is_available, reserved_quantity)
             VALUES 
-            (1, 'ART-001_BR001', 'SKU-001', 'iPhone 15 Pro', 1, 1, 900.00, 1035.00, 10, 1),
-            (2, 'ART-002_BR001', 'SKU-002', 'iPhone 15', 1, 1, 800.00, 920.00, 5, 1),
-            (3, 'ART-003_BR001', 'SKU-003', 'Out of Stock', 1, 1, 500.00, 575.00, 0, 0)
+            (1, 'vendor', 'ART-001_BR001', 'SKU-001', 'iPhone 15 Pro', 1, 1, 900.00, 1035.00, 10, 1, 0),
+            (2, 'vendor', 'ART-002_BR001', 'SKU-002', 'iPhone 15', 1, 1, 800.00, 920.00, 5, 1, 0),
+            (3, 'vendor', 'ART-003_BR001', 'SKU-003', 'Out of Stock', 1, 1, 500.00, 575.00, 0, 0, 0),
+            (4, 'own', NULL, 'OWN-001', 'Vodafone CallYa SIM', 1, 1, 10.00, 15.00, 100, 1, 0)
         ");
     }
     
@@ -172,7 +173,7 @@ class OrderServiceTest extends TestCase
         
         $this->assertEquals(0.00, floatval($order['shipping_cost']));
     }
-    
+
     /**
      * Test payment success processing
      */

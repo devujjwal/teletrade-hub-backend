@@ -183,7 +183,9 @@ class OrderController
 
             Response::success($result, 'Order created successfully', 201);
         } catch (Exception $e) {
-            Response::error($e->getMessage(), 400);
+            $message = $e->getMessage();
+            $statusCode = str_contains($message, 'Failed to reserve vendor products') ? 409 : 400;
+            Response::error($message, $statusCode);
         }
     }
 

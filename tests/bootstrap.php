@@ -81,7 +81,8 @@ class TestDatabase
         $sql = "
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            vendor_article_id VARCHAR(100) NOT NULL,
+            product_source VARCHAR(20) DEFAULT 'vendor',
+            vendor_article_id VARCHAR(100),
             sku VARCHAR(100),
             ean VARCHAR(50),
             name VARCHAR(255) NOT NULL,
