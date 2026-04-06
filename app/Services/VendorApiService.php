@@ -12,6 +12,7 @@ class VendorApiService
     private const MAX_LOG_ROWS = 10000;
 
     private $baseUrl;
+    private $restfulBaseUrl;
     private $apiKey;
     private $logEnabled;
     private static $retentionPruned = false;
@@ -19,6 +20,7 @@ class VendorApiService
     public function __construct()
     {
         $this->baseUrl = Env::get('VENDOR_API_BASE_URL', 'https://b2b.triel.sk/api');
+        $this->restfulBaseUrl = Env::get('VENDOR_RESTFUL_API_BASE_URL', 'https://restful.triel.sk');
         $this->apiKey = Env::get('VENDOR_API_KEY');
         $this->logEnabled = true;
     }
@@ -58,19 +60,21 @@ class VendorApiService
     {
         $startTime = microtime(true);
         
-        // TRIEL RESTful API might use different parameter names
-        // Try multiple formats to be compatible
+        // Vendor Postman docs specify reserveArticle/new with multipart form-data.
         $payload = [
             'sku' => $sku,
-            'warehouse' => $warehouse,
-            'quantity' => $quantity,
-            // Also include old API format just in case
-            'gensoft_id' => $sku,
-            'amount' => $quantity
+            'qty' => (string) $quantity,
+            // Warranty is optional in vendor docs; send the default empty value.
+            'warranty' => ''
         ];
 
         try {
-            $response = $this->makeRequest('POST', '/reserveArticle/', $payload);
+            $response = $this->makeRequest(
+                'POST',
+                $this->restfulBaseUrl . '/reserveArticle/new/',
+                $payload,
+                ['multipart' => true]
+            );
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('ReserveArticle', 'POST', $payload, $response, 200, $duration);
@@ -91,11 +95,16 @@ class VendorApiService
         $startTime = microtime(true);
         
         $payload = [
-            'reservation_id' => $reservationId  // Old API uses reservation_id
+            'reservation_id' => $reservationId
         ];
 
         try {
-            $response = $this->makeRequest('POST', '/removeReservedArticle/', $payload);
+            $response = $this->makeRequest(
+                'POST',
+                $this->restfulBaseUrl . '/reserveArticle/remove/',
+                $payload,
+                ['multipart' => true]
+            );
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('UnreserveArticle', 'POST', $payload, $response, 200, $duration);
@@ -111,19 +120,26 @@ class VendorApiService
     /**
      * Create sales order
      */
-    public function createSalesOrder($reservations, $payWith = 'Wire', $insurance = 'no')
+    public function createSalesOrder($reservations, $payWith = 'WireTransfer', $insurance = 'no')
     {
         $startTime = microtime(true);
         
-        // TRIEL format: reservations array, payWith, insurance
-        $orderData = [
-            'reservations' => json_encode($reservations),  // JSON encoded array of reservation IDs
-            'payWith' => $payWith,        // 'Wire' or 'OnDelivery'
-            'insurance' => $insurance     // 'yes' or 'no'
-        ];
+        // Vendor Postman docs specify multipart form-data with reservation[] and pay_method.
+        $orderData = [];
+        foreach ($reservations as $reservationId) {
+            $orderData['reservation[]'][] = (string) $reservationId;
+        }
+        $orderData['pay_method'] = $payWith;
+        $orderData['insurance'] = $insurance;
+        $orderData['drop_shipping'] = '0';
 
         try {
-            $response = $this->makeRequest('POST', '/createSalesOrder/', $orderData);
+            $response = $this->makeRequest(
+                'POST',
+                $this->restfulBaseUrl . '/createSalesOrder/',
+                $orderData,
+                ['multipart' => true]
+            );
             
             $duration = round((microtime(true) - $startTime) * 1000);
             $this->logApiCall('CreateSalesOrder', 'POST', $orderData, $response, 200, $duration);
@@ -167,15 +183,15 @@ class VendorApiService
     /**
      * Make HTTP request to vendor API
      */
-    private function makeRequest($method, $endpoint, $data = null)
+    private function makeRequest($method, $endpoint, $data = null, $options = [])
     {
-        $url = $this->baseUrl . $endpoint;
+        $url = preg_match('#^https?://#i', $endpoint) ? $endpoint : $this->baseUrl . $endpoint;
+        $isMultipart = !empty($options['multipart']);
 
         $ch = curl_init();
 
         $headers = [
             'Authorization: ' . $this->apiKey,  // TRIEL doesn't use "Bearer" prefix
-            'Content-Type: application/json',
             'Accept: application/json'
         ];
 
@@ -190,22 +206,22 @@ class VendorApiService
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
             if ($data !== null) {
-                // TRIEL API uses form-encoded data for POST (not JSON)
-                $postFields = http_build_query($data);
+                $postFields = $isMultipart ? $data : http_build_query($data);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
-                // Update content type for form data
-                $headers[1] = 'Content-Type: application/x-www-form-urlencoded';
-                curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+                if (!$isMultipart) {
+                    $headers[] = 'Content-Type: application/x-www-form-urlencoded';
+                }
             }
         } elseif ($method === 'GET' && $data !== null) {
             $url .= '?' . http_build_query($data);
             curl_setopt($ch, CURLOPT_URL, $url);
         }
 
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
 
         if ($error) {
             throw new Exception("Vendor API Error: $error");
@@ -221,6 +237,22 @@ class VendorApiService
         $decoded = json_decode($response, true);
         if ($decoded !== null) {
             return $decoded;
+        }
+
+        $trimmedResponse = trim((string) $response);
+        if ($trimmedResponse === '') {
+            return ['status' => 'ok'];
+        }
+
+        // Some vendor endpoints may return a plain reservation/order ID instead of JSON.
+        if (!str_starts_with($trimmedResponse, '<')) {
+            return [
+                'status' => 'ok',
+                'raw' => substr($trimmedResponse, 0, 500),
+                'ReturnVal' => $trimmedResponse,
+                'reservationId' => $trimmedResponse,
+                'id' => $trimmedResponse
+            ];
         }
         
         // SECURITY FIX: Removed unserialize() - CRITICAL VULNERABILITY
