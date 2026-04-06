@@ -174,7 +174,12 @@ class ReservationService
         }
 
         // Only unreserve if it was successfully reserved
-        if ($reservation['status'] !== 'reserved' || !$reservation['vendor_reservation_id']) {
+        if ($reservation['status'] !== 'reserved') {
+            return;
+        }
+
+        if (!$reservation['vendor_reservation_id']) {
+            $this->finalizeLocalUnreserve($reservation);
             return;
         }
 
@@ -195,11 +200,7 @@ class ReservationService
                 throw new Exception((string) $vendorError);
             }
 
-            // Update reservation status
-            $this->reservationModel->updateStatus($reservationId, 'unreserved');
-
-            // Release local stock
-            $this->productModel->releaseStock($reservation['product_id'], $reservation['quantity']);
+            $this->finalizeLocalUnreserve($reservation, $vendorResponse);
         } catch (Exception $e) {
             error_log("Failed to unreserve reservation {$reservationId}: " . $e->getMessage());
             $this->reservationModel->setError($reservationId, $e->getMessage());
@@ -208,6 +209,43 @@ class ReservationService
                 throw $e;
             }
         }
+    }
+
+    /**
+     * Unreserve by vendor reservation ID and sync local records when possible.
+     */
+    public function unreserveByVendorReservationId($vendorReservationId)
+    {
+        $reservation = $this->reservationModel->getByVendorReservationId($vendorReservationId);
+
+        if ($reservation) {
+            $this->unreserveProduct($reservation['id'], true);
+            return [
+                'synced_local_reservation' => true,
+                'local_reservation_id' => $reservation['id'],
+                'vendor_reservation_id' => $vendorReservationId,
+            ];
+        }
+
+        $vendorResponse = $this->vendorApi->unreserveArticle($vendorReservationId);
+        $isSuccess = (isset($vendorResponse['status']) && $vendorResponse['status'] === 'ok')
+            || (isset($vendorResponse['success']) && $vendorResponse['success'] === true)
+            || (isset($vendorResponse['error']) && intval($vendorResponse['error']) === 0);
+
+        if (!$isSuccess) {
+            $vendorError = $vendorResponse['message']
+                ?? $vendorResponse['error_msg']
+                ?? $vendorResponse['error']
+                ?? 'Unreserve failed';
+
+            throw new Exception((string) $vendorError);
+        }
+
+        return [
+            'synced_local_reservation' => false,
+            'vendor_reservation_id' => $vendorReservationId,
+            'vendor_response' => $vendorResponse,
+        ];
     }
 
     /**
@@ -234,6 +272,64 @@ class ReservationService
 
         if (!empty($errors)) {
             throw new Exception('Failed to unreserve vendor products: ' . implode('; ', $errors));
+        }
+    }
+
+    /**
+     * Mark a reservation unreserved locally and release any held stock safely.
+     */
+    private function finalizeLocalUnreserve(array $reservation, $vendorResponse = null)
+    {
+        $this->reservationModel->updateStatus($reservation['id'], 'unreserved', $vendorResponse);
+        $this->releaseLocalStockSafely((int) $reservation['product_id'], (int) $reservation['quantity']);
+        $this->syncOrderItemAfterUnreserve((int) $reservation['order_id'], (int) $reservation['product_id'], $reservation['vendor_article_id'] ?? null);
+    }
+
+    /**
+     * Avoid negative reserved stock if cleanup is retried after a partial failure.
+     */
+    private function releaseLocalStockSafely($productId, $quantity)
+    {
+        $product = $this->productModel->getById($productId);
+        if (!$product) {
+            return;
+        }
+
+        $reservedQuantity = max(0, (int) ($product['reserved_quantity'] ?? 0));
+        if ($reservedQuantity === 0) {
+            return;
+        }
+
+        $releaseQuantity = min($quantity, $reservedQuantity);
+        if ($releaseQuantity > 0) {
+            $this->productModel->releaseStock($productId, $releaseQuantity);
+        }
+    }
+
+    /**
+     * Reset vendor item fulfillment after unreserve so cancellation can complete cleanly.
+     */
+    private function syncOrderItemAfterUnreserve($orderId, $productId, $vendorArticleId = null)
+    {
+        $orderItemModel = new OrderItem();
+        $orderItems = $orderItemModel->getByOrderId($orderId);
+
+        foreach ($orderItems as $item) {
+            if ((int) $item['product_id'] !== $productId) {
+                continue;
+            }
+
+            if (($item['product_source'] ?? 'vendor') !== 'vendor') {
+                continue;
+            }
+
+            if ($vendorArticleId !== null && ($item['vendor_article_id'] ?? null) !== $vendorArticleId) {
+                continue;
+            }
+
+            if (($item['fulfillment_status'] ?? 'pending') === 'reserved') {
+                $orderItemModel->updateFulfillmentStatus($item['id'], 'pending');
+            }
         }
     }
 

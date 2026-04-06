@@ -392,7 +392,7 @@ class OrderService
         // Update payment status
         $this->orderModel->updatePaymentStatus($orderId, 'failed');
         $this->orderModel->updateStatus($orderId, 'cancelled');
-        $this->orderModel->updateFulfillmentStatus($orderId, 'cancelled');
+        $this->orderModel->updateFulfillmentStatus($orderId, 'pending');
     }
 
     /**
@@ -419,7 +419,7 @@ class OrderService
 
         // Update order status
         $this->orderModel->updateStatus($orderId, 'cancelled');
-        $this->orderModel->updateFulfillmentStatus($orderId, 'cancelled');
+        $this->orderModel->updateFulfillmentStatus($orderId, 'pending');
 
         // If payment was made, mark for refund
         if ($order['payment_status'] === 'paid') {
@@ -544,8 +544,29 @@ class OrderService
                 continue;
             }
 
-            $this->productModel->releaseStock($item['product_id'], $item['quantity']);
-            $this->orderItemModel->updateFulfillmentStatus($item['id'], 'cancelled');
+            $this->releaseOwnStockSafely((int) $item['product_id'], (int) $item['quantity']);
+            $this->orderItemModel->updateFulfillmentStatus($item['id'], 'pending');
+        }
+    }
+
+    /**
+     * Avoid double releasing own stock if a previous cancellation partially completed.
+     */
+    private function releaseOwnStockSafely($productId, $quantity)
+    {
+        $product = $this->productModel->getById($productId);
+        if (!$product) {
+            return;
+        }
+
+        $reservedQuantity = max(0, (int) ($product['reserved_quantity'] ?? 0));
+        if ($reservedQuantity === 0) {
+            return;
+        }
+
+        $releaseQuantity = min($quantity, $reservedQuantity);
+        if ($releaseQuantity > 0) {
+            $this->productModel->releaseStock($productId, $releaseQuantity);
         }
     }
 

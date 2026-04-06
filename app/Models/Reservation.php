@@ -51,6 +51,17 @@ class Reservation
     }
 
     /**
+     * Get reservation by vendor reservation ID
+     */
+    public function getByVendorReservationId($vendorReservationId)
+    {
+        $sql = "SELECT * FROM reservations WHERE vendor_reservation_id = :vendor_reservation_id LIMIT 1";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':vendor_reservation_id' => $vendorReservationId]);
+        return $stmt->fetch();
+    }
+
+    /**
      * Update reservation status
      */
     public function updateStatus($id, $status, $vendorResponse = null)

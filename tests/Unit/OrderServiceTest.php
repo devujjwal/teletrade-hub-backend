@@ -308,7 +308,7 @@ class OrderServiceTest extends TestCase
         $order = $stmt->fetch();
 
         $this->assertEquals('cancelled', $order['status']);
-        $this->assertEquals('cancelled', $order['fulfillment_status']);
+        $this->assertEquals('pending', $order['fulfillment_status']);
 
         $stmt = $this->db->prepare("SELECT reserved_quantity, available_quantity FROM products WHERE id = ?");
         $stmt->execute([1]);
@@ -333,7 +333,7 @@ class OrderServiceTest extends TestCase
         $stmt->execute([$orderId]);
         $ownItem = $stmt->fetch();
 
-        $this->assertEquals('cancelled', $ownItem['fulfillment_status']);
+        $this->assertEquals('pending', $ownItem['fulfillment_status']);
     }
     
     /**

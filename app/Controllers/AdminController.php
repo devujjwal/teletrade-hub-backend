@@ -6,6 +6,7 @@ require_once __DIR__ . '/../Services/OrderService.php';
 require_once __DIR__ . '/../Services/ProductSyncService.php';
 require_once __DIR__ . '/../Services/PricingService.php';
 require_once __DIR__ . '/../Services/VendorApiService.php';
+require_once __DIR__ . '/../Services/ReservationService.php';
 require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
@@ -45,6 +46,7 @@ class AdminController
     private $contentInvalidation;
     private $apiCache;
     private $vendorApi;
+    private $reservationService;
     private $db;
 
     public function __construct()
@@ -67,6 +69,7 @@ class AdminController
             $this->contentInvalidation = null;
             $this->apiCache = new ApiCacheService();
             $this->vendorApi = null;
+            $this->reservationService = null;
             $this->db = Database::getConnection();
         } catch (Exception $e) {
             error_log("AdminController constructor error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
@@ -160,6 +163,17 @@ class AdminController
             $this->vendorApi = new VendorApiService();
         }
         return $this->vendorApi;
+    }
+
+    /**
+     * Get reservation service instance (lazy-loaded)
+     */
+    private function getReservationService()
+    {
+        if ($this->reservationService === null) {
+            $this->reservationService = new ReservationService();
+        }
+        return $this->reservationService;
     }
 
     /**
@@ -1857,11 +1871,11 @@ class AdminController
                 Response::error('Reservation ID is required', 400);
             }
 
-            $response = $this->getVendorApi()->unreserveArticle($normalizedReservationId);
+            $result = $this->getReservationService()->unreserveByVendorReservationId($normalizedReservationId);
 
             Response::success([
                 'reservation_id' => $normalizedReservationId,
-                'vendor_response' => $response,
+                'result' => $result,
             ], 'Vendor reservation removed successfully');
         } catch (Exception $e) {
             Response::error('Failed to remove vendor reservation: ' . $e->getMessage(), 500);
