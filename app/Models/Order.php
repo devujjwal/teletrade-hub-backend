@@ -222,8 +222,12 @@ class Order
                 WHERE 1=1";
 
         if (!empty($filters['status'])) {
-            $sql .= " AND o.status = :status";
-            $params[':status'] = $filters['status'];
+            if ($filters['status'] === 'processing') {
+                $sql .= " AND o.status IN ('processing', 'reserved')";
+            } else {
+                $sql .= " AND o.status = :status";
+                $params[':status'] = $filters['status'];
+            }
         }
 
         if (!empty($filters['payment_status'])) {
@@ -271,8 +275,12 @@ class Order
                 WHERE 1=1";
 
         if (!empty($filters['status'])) {
-            $sql .= " AND o.status = :status";
-            $params[':status'] = $filters['status'];
+            if ($filters['status'] === 'processing') {
+                $sql .= " AND o.status IN ('processing', 'reserved')";
+            } else {
+                $sql .= " AND o.status = :status";
+                $params[':status'] = $filters['status'];
+            }
         }
 
         if (!empty($filters['payment_status'])) {
@@ -362,8 +370,8 @@ class Order
 
     /**
      * Get orders ready for vendor submission
-     * Returns orders with status 'reserved' that have vendor items
-     * Only includes orders with vendor products that are reserved and not yet ordered
+     * Returns vendor-backed orders that still have reserved vendor items pending submission.
+     * Includes legacy 'reserved' orders for backward compatibility and current 'processing' orders.
      */
     public function getReadyForVendorSubmission()
     {

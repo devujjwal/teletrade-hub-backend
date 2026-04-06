@@ -177,6 +177,18 @@ class AdminController
     }
 
     /**
+     * Keep admin-facing order statuses inside the five supported UI states.
+     */
+    private function normalizeAdminOrderStatus(array $order)
+    {
+        if (($order['status'] ?? null) === 'reserved') {
+            $order['status'] = 'processing';
+        }
+
+        return $order;
+    }
+
+    /**
      * Check whether a sync job is already active.
      */
     private function isSyncRunning()
@@ -640,6 +652,7 @@ class AdminController
         }
 
         $orders = $this->getOrderModel()->getAll($filters, $page, $limit);
+        $orders = array_map([$this, 'normalizeAdminOrderStatus'], $orders);
         $total = $this->getOrderModel()->count($filters);
 
         Response::success([
@@ -970,6 +983,8 @@ class AdminController
         if (!$order) {
             Response::notFound('Order not found');
         }
+
+        $order = $this->normalizeAdminOrderStatus($order);
 
         Response::success(['order' => $order]);
     }

@@ -210,7 +210,7 @@ class OrderService
                     $this->orderModel->updateFulfillmentStatus($orderId, 'partially_fulfilled');
                     $this->orderModel->markOwnItemsFulfilled($orderId);
                 } elseif (!empty($reservations)) {
-                    $this->orderModel->updateStatus($orderId, 'reserved');
+                    $this->orderModel->updateStatus($orderId, 'processing');
                     $this->orderModel->updateFulfillmentStatus($orderId, 'vendor_pending');
                 } elseif (!empty($ownItemsProcessed)) {
                     $this->orderModel->updateStatus($orderId, 'processing');
@@ -219,7 +219,7 @@ class OrderService
                 }
             } elseif (!empty($vendorItems)) {
                 if (!empty($reservations)) {
-                    $this->orderModel->updateStatus($orderId, 'reserved');
+                    $this->orderModel->updateStatus($orderId, 'processing');
                     $this->orderModel->updateFulfillmentStatus($orderId, 'vendor_pending');
                 }
             } elseif (!empty($ownItems)) {
@@ -334,7 +334,7 @@ class OrderService
                     $this->orderModel->updateFulfillmentStatus($orderId, 'partially_fulfilled');
                     $this->orderModel->markOwnItemsFulfilled($orderId);
                 } elseif (!empty($reservations)) {
-                    $this->orderModel->updateStatus($orderId, 'reserved');
+                    $this->orderModel->updateStatus($orderId, 'processing');
                     $this->orderModel->updateFulfillmentStatus($orderId, 'vendor_pending');
                 } elseif (!empty($ownItemsProcessed)) {
                     $this->orderModel->updateStatus($orderId, 'processing');
@@ -344,7 +344,7 @@ class OrderService
             } elseif (!empty($vendorItems)) {
                 // Vendor only
                 if (!empty($reservations)) {
-                    $this->orderModel->updateStatus($orderId, 'reserved');
+                    $this->orderModel->updateStatus($orderId, 'processing');
                     $this->orderModel->updateFulfillmentStatus($orderId, 'vendor_pending');
                 }
             } elseif (!empty($ownItems)) {
