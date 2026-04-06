@@ -118,6 +118,30 @@ class VendorApiService
     }
 
     /**
+     * Get currently reserved articles.
+     */
+    public function getReservedArticles()
+    {
+        $startTime = microtime(true);
+
+        try {
+            $response = $this->makeRequest(
+                'GET',
+                $this->restfulBaseUrl . '/reserveArticle/get/'
+            );
+
+            $duration = round((microtime(true) - $startTime) * 1000);
+            $this->logApiCall('GetReservedArticles', 'GET', null, $response, 200, $duration);
+
+            return $response;
+        } catch (Exception $e) {
+            $duration = round((microtime(true) - $startTime) * 1000);
+            $this->logApiCall('GetReservedArticles', 'GET', null, null, 0, $duration, $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
      * Create sales order
      */
     public function createSalesOrder($reservations, $payWith = 'WireTransfer', $insurance = 'no')

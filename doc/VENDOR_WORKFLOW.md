@@ -33,22 +33,24 @@ POST /admin/sync/products
 ```
 
 ### Step 2: Reserve Articles on Order (ReserveArticle)
-**When:** When customer places order and payment succeeds  
+**When:** Immediately when customer places order successfully  
 **What:** Reserve purchased items with vendor
 
 **Implementation:**
-- Automatically triggered on `processPaymentSuccess()`
-- Only reserves **vendor products** (own products skip this step)
-- Creates reservation record in database
-- Updates order status to 'reserved'
+- Automatically triggered on `createOrder()`
+- Only reserves **vendor products** (own products skip vendor reservation)
+- Own products are held locally by moving quantity into `reserved_quantity`
+- Creates reservation records in the database
+- Mixed orders move to `processing` with `partially_fulfilled` fulfillment status
+- Vendor-only orders move to `reserved`
 
 **Flow:**
 ```
-Customer Order → Payment Success → ReserveArticle (vendor items only)
+Customer Order Placed → ReserveArticle (vendor items only) + Hold Own Stock
 ```
 
 **Code Location:**
-- `OrderService::processPaymentSuccess()`
+- `OrderService::createOrder()`
 - `ReservationService::reserveOrderProducts()`
 
 ### Step 3: Create Sales Order (CreateSalesOrder)
@@ -93,10 +95,11 @@ POST /admin/vendor/create-sales-order
 **Throughout Day:**
 ```
 2. Customer Orders
-   └─ Order created
-   └─ Payment succeeds
+   └─ Order created successfully
    └─ ReserveArticle (vendor items)
-   └─ Stock deducted (own items)
+   └─ Hold own stock locally (own items)
+   └─ Admin can review current vendor reservations
+   └─ Admin can unreserve vendor reservations if needed
 ```
 
 **Evening (17:00 / 5:00 PM):**
@@ -114,8 +117,6 @@ POST /admin/vendor/create-sales-order
 ```
 Order Created (status: 'pending')
   ↓
-Payment Success
-  ↓
 ReserveArticle (status: 'reserved')
   ↓
 [Wait until end of day]
@@ -129,8 +130,6 @@ Vendor Ships (status: 'shipped')
 ```
 Order Created (status: 'pending')
   ↓
-Payment Success
-  ↓
 Stock Deducted (status: 'processing')
   ↓
 Ready to Ship (status: 'processing')
@@ -142,9 +141,9 @@ Shipped (status: 'shipped')
 ```
 Order Created (status: 'pending')
   ↓
-Payment Success
+Order Placement Success
   ├─ Vendor Items: ReserveArticle (status: 'reserved')
-  └─ Own Items: Stock Deducted (status: 'stock_deducted')
+  └─ Own Items: Stock Held Locally (item status: 'fulfilled' after hold)
   ↓
 (fulfillment_status: 'partially_fulfilled')
   ↓
@@ -152,6 +151,26 @@ CreateSalesOrder (vendor items only)
   ↓
 (fulfillment_status: 'fulfilled' when both complete)
 ```
+
+## Admin Controls
+
+### Vendor Reservations Screen
+- Frontend route: `/admin/vendor-reservations`
+- Backend APIs:
+  - `GET /admin/vendor/reservations`
+  - `DELETE /admin/vendor/reservations/{reservationId}`
+- Purpose:
+  - View currently reserved TRIEL articles
+  - Inspect raw vendor payload
+  - Manually unreserve stock at the vendor when needed
+
+### Order Cancellation Cleanup
+- Admin cancelling an order from `/admin/orders` now uses the shared order cancellation service.
+- Cancellation behavior:
+  - Vendor reservations are unreserved first
+  - Own-product held stock is restored
+  - Order/item fulfillment statuses move to `cancelled`
+- This applies to mixed orders as well as vendor-only and own-only orders.
 
 ## Cron Job Setup
 
@@ -277,4 +296,3 @@ This workflow ensures:
 - ✅ Items are reserved immediately
 - ✅ Vendor orders are created efficiently in batches
 - ✅ No manual intervention needed
-

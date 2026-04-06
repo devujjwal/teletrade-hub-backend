@@ -5,6 +5,7 @@ require_once __DIR__ . '/../Middlewares/RateLimitMiddleware.php';
 require_once __DIR__ . '/../Services/OrderService.php';
 require_once __DIR__ . '/../Services/ProductSyncService.php';
 require_once __DIR__ . '/../Services/PricingService.php';
+require_once __DIR__ . '/../Services/VendorApiService.php';
 require_once __DIR__ . '/../Models/Order.php';
 require_once __DIR__ . '/../Models/Product.php';
 require_once __DIR__ . '/../Models/Category.php';
@@ -43,6 +44,7 @@ class AdminController
     private $emailNotifications;
     private $contentInvalidation;
     private $apiCache;
+    private $vendorApi;
     private $db;
 
     public function __construct()
@@ -64,6 +66,7 @@ class AdminController
             $this->emailNotifications = null;
             $this->contentInvalidation = null;
             $this->apiCache = new ApiCacheService();
+            $this->vendorApi = null;
             $this->db = Database::getConnection();
         } catch (Exception $e) {
             error_log("AdminController constructor error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
@@ -146,6 +149,17 @@ class AdminController
             $this->productSyncService = new ProductSyncService();
         }
         return $this->productSyncService;
+    }
+
+    /**
+     * Get vendor API service instance (lazy-loaded)
+     */
+    private function getVendorApi()
+    {
+        if ($this->vendorApi === null) {
+            $this->vendorApi = new VendorApiService();
+        }
+        return $this->vendorApi;
     }
 
     /**
@@ -967,15 +981,20 @@ class AdminController
         try {
             $newStatus = $input['status'];
             $orderModel = $this->getOrderModel();
+            $orderService = $this->getOrderService();
             
             // Get current order to check current status
             $currentOrder = $orderModel->getById($id);
             if (!$currentOrder) {
                 Response::notFound('Order not found');
             }
-            
-            // Update order status
-            $orderModel->updateStatus($id, $newStatus);
+
+            if ($currentOrder['status'] !== $newStatus && $newStatus === 'cancelled') {
+                $orderService->cancelOrder($id, 'Cancelled by admin');
+            } else {
+                // Update order status
+                $orderModel->updateStatus($id, $newStatus);
+            }
             
             // Auto-update payment status based on order status
             // Logic: 
@@ -1790,6 +1809,62 @@ class AdminController
             }
         } catch (Exception $e) {
             Response::error('Failed to create sales order: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get currently reserved vendor articles.
+     */
+    public function vendorReservations()
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+
+        try {
+            $response = $this->getVendorApi()->getReservedArticles();
+
+            $reservations = [];
+            if (is_array($response)) {
+                if (array_is_list($response)) {
+                    $reservations = $response;
+                } elseif (isset($response['data']) && is_array($response['data'])) {
+                    $reservations = $response['data'];
+                } elseif (isset($response['reservations']) && is_array($response['reservations'])) {
+                    $reservations = $response['reservations'];
+                } elseif (isset($response[0])) {
+                    $reservations = $response;
+                }
+            }
+
+            Response::success([
+                'reservations' => $reservations,
+                'raw_response' => $response,
+            ]);
+        } catch (Exception $e) {
+            Response::error('Failed to load vendor reservations: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Remove a vendor reservation.
+     */
+    public function unreserveVendorReservation($reservationId)
+    {
+        $admin = $this->authMiddleware->verifyAdmin();
+
+        try {
+            $normalizedReservationId = Sanitizer::string($reservationId);
+            if ($normalizedReservationId === '') {
+                Response::error('Reservation ID is required', 400);
+            }
+
+            $response = $this->getVendorApi()->unreserveArticle($normalizedReservationId);
+
+            Response::success([
+                'reservation_id' => $normalizedReservationId,
+                'vendor_response' => $response,
+            ], 'Vendor reservation removed successfully');
+        } catch (Exception $e) {
+            Response::error('Failed to remove vendor reservation: ' . $e->getMessage(), 500);
         }
     }
 

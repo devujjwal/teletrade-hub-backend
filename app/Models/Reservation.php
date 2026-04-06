@@ -58,9 +58,9 @@ class Reservation
         $sql = "UPDATE reservations SET 
                 status = :status,
                 vendor_response = :vendor_response,
-                reserved_at = CASE WHEN :status = 'reserved' THEN NOW() ELSE reserved_at END,
-                unreserved_at = CASE WHEN :status = 'unreserved' THEN NOW() ELSE unreserved_at END,
-                ordered_at = CASE WHEN :status = 'ordered' THEN NOW() ELSE ordered_at END
+                reserved_at = CASE WHEN :status = 'reserved' THEN CURRENT_TIMESTAMP ELSE reserved_at END,
+                unreserved_at = CASE WHEN :status = 'unreserved' THEN CURRENT_TIMESTAMP ELSE unreserved_at END,
+                ordered_at = CASE WHEN :status = 'ordered' THEN CURRENT_TIMESTAMP ELSE ordered_at END
                 WHERE id = :id";
         
         $stmt = $this->db->prepare($sql);
@@ -79,7 +79,7 @@ class Reservation
         $sql = "UPDATE reservations SET 
                 vendor_reservation_id = :vendor_reservation_id,
                 status = :status,
-                reserved_at = NOW()
+                reserved_at = CURRENT_TIMESTAMP
                 WHERE id = :id";
         
         $stmt = $this->db->prepare($sql);
@@ -153,7 +153,7 @@ class Reservation
         $placeholders = implode(',', array_fill(0, count($reservationIds), '?'));
         $sql = "UPDATE reservations SET 
                 status = 'ordered',
-                ordered_at = NOW()
+                ordered_at = CURRENT_TIMESTAMP
                 WHERE id IN ($placeholders)";
         
         $stmt = $this->db->prepare($sql);

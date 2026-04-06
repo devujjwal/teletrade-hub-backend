@@ -244,6 +244,8 @@ $router->delete('admin/brands/{id}', 'AdminController', 'deleteBrand');
 
 // Admin Vendor Orders
 $router->post('admin/vendor/create-sales-order', 'AdminController', 'createSalesOrder');
+$router->get('admin/vendor/reservations', 'AdminController', 'vendorReservations');
+$router->delete('admin/vendor/reservations/{reservationId}', 'AdminController', 'unreserveVendorReservation');
 
 // Admin Settings
 $router->get('admin/settings', 'AdminController', 'getSettings');

@@ -384,12 +384,15 @@ class OrderService
      */
     public function processPaymentFailure($orderId, $reason = null)
     {
+        // Unreserve any products that might have been reserved
+        $this->reservationService->unreserveOrderProducts($orderId, true);
+
+        $this->releaseOwnProductStock($orderId);
+
         // Update payment status
         $this->orderModel->updatePaymentStatus($orderId, 'failed');
         $this->orderModel->updateStatus($orderId, 'cancelled');
-
-        // Unreserve any products that might have been reserved
-        $this->reservationService->unreserveOrderProducts($orderId);
+        $this->orderModel->updateFulfillmentStatus($orderId, 'cancelled');
     }
 
     /**
@@ -404,16 +407,19 @@ class OrderService
         }
 
         // Can only cancel certain statuses
-        $cancellableStatuses = ['pending', 'payment_pending', 'reserved'];
+        $cancellableStatuses = ['pending', 'payment_pending', 'reserved', 'processing'];
         if (!in_array($order['status'], $cancellableStatuses)) {
             throw new Exception('Order cannot be cancelled at this stage');
         }
 
         // Unreserve products
-        $this->reservationService->unreserveOrderProducts($orderId);
+        $this->reservationService->unreserveOrderProducts($orderId, true);
+
+        $this->releaseOwnProductStock($orderId);
 
         // Update order status
         $this->orderModel->updateStatus($orderId, 'cancelled');
+        $this->orderModel->updateFulfillmentStatus($orderId, 'cancelled');
 
         // If payment was made, mark for refund
         if ($order['payment_status'] === 'paid') {
@@ -520,6 +526,27 @@ class OrderService
         return (isset($response['success']) && $response['success'] === true)
             || (isset($response['status']) && $response['status'] === 'ok')
             || (isset($response['error']) && intval($response['error']) === 0);
+    }
+
+    /**
+     * Restore own-product stock that was held for this order.
+     */
+    private function releaseOwnProductStock($orderId)
+    {
+        $orderItems = $this->orderItemModel->getByOrderId($orderId);
+
+        foreach ($orderItems as $item) {
+            if (($item['product_source'] ?? 'vendor') !== 'own') {
+                continue;
+            }
+
+            if (!in_array($item['fulfillment_status'] ?? 'pending', ['stock_deducted', 'fulfilled'], true)) {
+                continue;
+            }
+
+            $this->productModel->releaseStock($item['product_id'], $item['quantity']);
+            $this->orderItemModel->updateFulfillmentStatus($item['id'], 'cancelled');
+        }
     }
 
     /**

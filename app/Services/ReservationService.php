@@ -165,7 +165,7 @@ class ReservationService
     /**
      * Unreserve product
      */
-    public function unreserveProduct($reservationId)
+    public function unreserveProduct($reservationId, $strict = false)
     {
         $reservation = $this->reservationModel->getById($reservationId);
 
@@ -180,7 +180,20 @@ class ReservationService
 
         try {
             // Call vendor API to unreserve
-            $this->vendorApi->unreserveArticle($reservation['vendor_reservation_id']);
+            $vendorResponse = $this->vendorApi->unreserveArticle($reservation['vendor_reservation_id']);
+
+            $isSuccess = (isset($vendorResponse['status']) && $vendorResponse['status'] === 'ok')
+                || (isset($vendorResponse['success']) && $vendorResponse['success'] === true)
+                || (isset($vendorResponse['error']) && intval($vendorResponse['error']) === 0);
+
+            if (!$isSuccess) {
+                $vendorError = $vendorResponse['message']
+                    ?? $vendorResponse['error_msg']
+                    ?? $vendorResponse['error']
+                    ?? 'Unreserve failed';
+
+                throw new Exception((string) $vendorError);
+            }
 
             // Update reservation status
             $this->reservationModel->updateStatus($reservationId, 'unreserved');
@@ -188,23 +201,39 @@ class ReservationService
             // Release local stock
             $this->productModel->releaseStock($reservation['product_id'], $reservation['quantity']);
         } catch (Exception $e) {
-            // Log error but don't throw - best effort unreservation
-            error_log("Failed to unreserve: " . $e->getMessage());
+            error_log("Failed to unreserve reservation {$reservationId}: " . $e->getMessage());
             $this->reservationModel->setError($reservationId, $e->getMessage());
+
+            if ($strict) {
+                throw $e;
+            }
         }
     }
 
     /**
      * Unreserve all products for an order
      */
-    public function unreserveOrderProducts($orderId)
+    public function unreserveOrderProducts($orderId, $strict = false)
     {
         $reservations = $this->reservationModel->getByOrderId($orderId);
+        $errors = [];
 
         foreach ($reservations as $reservation) {
             if ($reservation['status'] === 'reserved') {
-                $this->unreserveProduct($reservation['id']);
+                try {
+                    $this->unreserveProduct($reservation['id'], $strict);
+                } catch (Exception $e) {
+                    $errors[] = sprintf(
+                        'Reservation %s: %s',
+                        $reservation['vendor_reservation_id'] ?? $reservation['id'],
+                        $e->getMessage()
+                    );
+                }
             }
+        }
+
+        if (!empty($errors)) {
+            throw new Exception('Failed to unreserve vendor products: ' . implode('; ', $errors));
         }
     }
 

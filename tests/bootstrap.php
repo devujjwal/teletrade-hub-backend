@@ -162,6 +162,9 @@ class TestDatabase
             price DECIMAL(10,2) NOT NULL,
             subtotal DECIMAL(10,2) NOT NULL,
             fulfillment_status VARCHAR(50) DEFAULT 'pending',
+            reserved_at DATETIME,
+            stock_deducted_at DATETIME,
+            shipped_at DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -181,7 +184,11 @@ class TestDatabase
             vendor_reservation_id VARCHAR(100),
             quantity INTEGER NOT NULL,
             status VARCHAR(50) DEFAULT 'pending',
+            vendor_response TEXT,
             error_message TEXT,
+            reserved_at DATETIME,
+            unreserved_at DATETIME,
+            ordered_at DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );

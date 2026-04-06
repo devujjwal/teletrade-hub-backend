@@ -27,16 +27,17 @@
 ### Order Status Flow for Mixed Orders
 
 ```
-pending → paid → processing → [vendor_ordered | fulfilled | partially_fulfilled]
+pending → [reserved | processing] → [vendor_ordered | fulfilled | partially_fulfilled | cancelled]
 ```
 
 ### Key Design Principles
 
 1. **Separate vendor items from own items** at order creation
-2. **Reserve only vendor products** after payment
-3. **Deduct stock immediately** for own products
+2. **Reserve vendor products immediately** when the order is placed successfully
+3. **Hold own stock immediately** for own products
 4. **Process vendor orders separately** (batch at end of day)
 5. **Track fulfillment status** per item type
+6. **Release both vendor and own stock** when an order is cancelled before shipment
 
 ## Implementation Strategy
 
@@ -46,16 +47,25 @@ pending → paid → processing → [vendor_ordered | fulfilled | partially_fulf
 - Validate stock for both types
 
 ### Phase 2: Payment Success
-- **Vendor products:** Reserve via API
-- **Own products:** Deduct stock immediately
-- Update order status based on results
+- No longer the reservation trigger for bank-transfer / admin-review orders.
+- Reservation and own-stock hold now happen during successful order placement.
+
+### Phase 2: Order Placement Success
+- **Vendor products:** Reserve via API immediately
+- **Own products:** Hold stock locally immediately
+- Update order and fulfillment status based on whether the order is vendor-only, own-only, or mixed
 
 ### Phase 3: Fulfillment
 - **Vendor products:** Create vendor order (batch)
 - **Own products:** Mark as ready to ship
 - Track fulfillment per item type
 
-### Phase 4: Shipping
+### Phase 4: Cancellation
+- **Vendor products:** Unreserve vendor reservations
+- **Own products:** Restore held stock locally
+- Update order and order-item fulfillment statuses to `cancelled`
+
+### Phase 5: Shipping
 - **Vendor products:** Wait for vendor shipment
 - **Own products:** Ship immediately
 - Update order status accordingly
@@ -75,20 +85,31 @@ pending → paid → processing → [vendor_ordered | fulfilled | partially_fulf
 
 ### Example 1: Pure Vendor Order
 ```
-Order Created → Payment → Reserve → Vendor Order → Shipped
+Order Created → Reserve → Vendor Order → Shipped
 ```
 
 ### Example 2: Pure Own Order
 ```
-Order Created → Payment → Stock Deducted → Ready to Ship → Shipped
+Order Created → Own Stock Held → Ready to Ship → Shipped
 ```
 
 ### Example 3: Mixed Order
 ```
-Order Created → Payment → 
+Order Created → 
   ├─ Vendor Items: Reserve → Vendor Order → Shipped
-  └─ Own Items: Stock Deducted → Ready to Ship → Shipped
+  └─ Own Items: Stock Held → Ready to Ship → Shipped
   
 Order Status: partially_fulfilled → fulfilled
 ```
 
+### Example 4: Mixed Order Cancelled by Admin
+```
+Order Created →
+  ├─ Vendor Items: Reserve
+  └─ Own Items: Stock Held
+Cancel Order →
+  ├─ Vendor Items: Unreserve
+  └─ Own Items: Restore stock
+
+Order Status: cancelled
+```

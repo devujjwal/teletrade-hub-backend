@@ -266,6 +266,75 @@ class OrderServiceTest extends TestCase
         
         $this->assertEquals('cancelled', $order['status']);
     }
+
+    /**
+     * Test cancelling a mixed order restores vendor and own stock holds
+     */
+    public function testCancelOrderReleasesReservedVendorAndOwnStock()
+    {
+        MockVendorApi::setResponse('reserveArticle', [
+            'status' => 'ok',
+            'ReturnVal' => 'RES-MIXED-1'
+        ]);
+
+        $orderData = ['user_id' => 1, 'payment_method' => 'bank_transfer'];
+        $cartItems = [
+            ['product_id' => 1, 'quantity' => 1],
+            ['product_id' => 4, 'quantity' => 2]
+        ];
+
+        $result = $this->orderService->createOrder($orderData, $cartItems, $this->getTestAddress(), null);
+        $orderId = $result['order_id'];
+
+        $stmt = $this->db->prepare("SELECT reserved_quantity, available_quantity FROM products WHERE id = ?");
+        $stmt->execute([1]);
+        $vendorBeforeCancel = $stmt->fetch();
+
+        $stmt = $this->db->prepare("SELECT reserved_quantity, available_quantity FROM products WHERE id = ?");
+        $stmt->execute([4]);
+        $ownBeforeCancel = $stmt->fetch();
+
+        $this->assertEquals(1, intval($vendorBeforeCancel['reserved_quantity']));
+        $this->assertEquals(9, intval($vendorBeforeCancel['available_quantity']));
+        $this->assertEquals(2, intval($ownBeforeCancel['reserved_quantity']));
+        $this->assertEquals(98, intval($ownBeforeCancel['available_quantity']));
+
+        MockVendorApi::setResponse('unreserveArticle', ['status' => 'ok']);
+
+        $this->orderService->cancelOrder($orderId, 'Admin cancelled order');
+
+        $stmt = $this->db->prepare("SELECT status, fulfillment_status FROM orders WHERE id = ?");
+        $stmt->execute([$orderId]);
+        $order = $stmt->fetch();
+
+        $this->assertEquals('cancelled', $order['status']);
+        $this->assertEquals('cancelled', $order['fulfillment_status']);
+
+        $stmt = $this->db->prepare("SELECT reserved_quantity, available_quantity FROM products WHERE id = ?");
+        $stmt->execute([1]);
+        $vendorAfterCancel = $stmt->fetch();
+
+        $stmt = $this->db->prepare("SELECT reserved_quantity, available_quantity FROM products WHERE id = ?");
+        $stmt->execute([4]);
+        $ownAfterCancel = $stmt->fetch();
+
+        $this->assertEquals(0, intval($vendorAfterCancel['reserved_quantity']));
+        $this->assertEquals(10, intval($vendorAfterCancel['available_quantity']));
+        $this->assertEquals(0, intval($ownAfterCancel['reserved_quantity']));
+        $this->assertEquals(100, intval($ownAfterCancel['available_quantity']));
+
+        $stmt = $this->db->prepare("SELECT status FROM reservations WHERE order_id = ?");
+        $stmt->execute([$orderId]);
+        $reservation = $stmt->fetch();
+
+        $this->assertEquals('unreserved', $reservation['status']);
+
+        $stmt = $this->db->prepare("SELECT fulfillment_status FROM order_items WHERE order_id = ? AND product_source = 'own'");
+        $stmt->execute([$orderId]);
+        $ownItem = $stmt->fetch();
+
+        $this->assertEquals('cancelled', $ownItem['fulfillment_status']);
+    }
     
     /**
      * Test cannot cancel shipped order
