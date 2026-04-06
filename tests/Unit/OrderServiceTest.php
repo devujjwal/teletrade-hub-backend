@@ -102,7 +102,7 @@ class OrderServiceTest extends TestCase
         $billingAddress = $this->getTestAddress();
         
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('not available');
+        $this->expectExceptionMessage('Out of Stock is not available');
         
         $this->orderService->createOrder($orderData, $cartItems, $billingAddress, null);
     }

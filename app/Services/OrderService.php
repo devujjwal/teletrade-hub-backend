@@ -577,13 +577,21 @@ class OrderService
     {
         foreach ($cartItems as $item) {
             $product = $this->productModel->getById($item['product_id']);
+            $productLabel = trim((string) ($product['name'] ?? ''));
+            if ($productLabel === '') {
+                $productLabel = 'Selected product';
+            }
 
-            if (!$product || !$product['is_available']) {
-                throw new Exception("Product {$item['product_id']} is not available");
+            if (!$product) {
+                throw new Exception("{$productLabel} is no longer available");
+            }
+
+            if (!$product['is_available']) {
+                throw new Exception("{$productLabel} is not available");
             }
 
             if ($product['available_quantity'] < $item['quantity']) {
-                throw new Exception("Insufficient stock for product {$product['name']}");
+                throw new Exception("Insufficient stock for {$productLabel}");
             }
         }
     }
