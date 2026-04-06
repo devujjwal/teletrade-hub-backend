@@ -419,7 +419,8 @@ class Product
     {
         $sql = "UPDATE products SET 
                 reserved_quantity = reserved_quantity + :quantity,
-                available_quantity = available_quantity - :quantity
+                available_quantity = available_quantity - :quantity,
+                is_available = CASE WHEN (available_quantity - :quantity) > 0 THEN 1 ELSE 0 END
                 WHERE id = :id AND available_quantity >= :quantity";
         
         $stmt = $this->db->prepare($sql);
@@ -433,7 +434,8 @@ class Product
     {
         $sql = "UPDATE products SET 
                 reserved_quantity = reserved_quantity - :quantity,
-                available_quantity = available_quantity + :quantity
+                available_quantity = available_quantity + :quantity,
+                is_available = CASE WHEN (available_quantity + :quantity) > 0 THEN 1 ELSE 0 END
                 WHERE id = :id";
         
         $stmt = $this->db->prepare($sql);
