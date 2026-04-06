@@ -120,13 +120,22 @@ class ReservationService
             // Call vendor API to reserve
             $vendorResponse = $this->vendorApi->reserveArticle($vendorArticleId, $warehouse, $quantity);
 
-            // TRIEL returns array with 'status' and 'ReturnVal' or 'error' and 'error_msg'
+            // TRIEL success payloads have used multiple reservation ID keys over time.
             $isSuccess = (isset($vendorResponse['status']) && $vendorResponse['status'] === 'ok') ||
                         (isset($vendorResponse['error']) && $vendorResponse['error'] === 0);
             
             if ($isSuccess) {
-                // Update reservation with vendor ID (TRIEL returns 'ReturnVal' with reservation ID)
-                $vendorReservationId = $vendorResponse['ReturnVal'] ?? $vendorResponse['reservationId'] ?? $vendorResponse['id'];
+                $vendorReservationId = $vendorResponse['reservation']
+                    ?? $vendorResponse['ReturnVal']
+                    ?? $vendorResponse['reservationId']
+                    ?? $vendorResponse['reservation_id']
+                    ?? $vendorResponse['id']
+                    ?? null;
+
+                if ($vendorReservationId === null || $vendorReservationId === '') {
+                    throw new Exception('Vendor reservation succeeded but no reservation ID was returned');
+                }
+
                 $this->reservationModel->updateVendorReservation($reservationId, $vendorReservationId);
 
                 // Update local stock

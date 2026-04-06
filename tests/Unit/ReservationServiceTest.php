@@ -61,6 +61,29 @@ class ReservationServiceTest extends TestCase
         $product = $stmt->fetch();
         $this->assertEquals(2, intval($product['reserved_quantity']));
     }
+
+    /**
+     * Test successful reservation when TRIEL returns reservation under `reservation`
+     */
+    public function testReserveProductSuccessWithReservationField()
+    {
+        MockVendorApi::setResponse('reserveArticle', [
+            'error' => 0,
+            'error_msg' => '',
+            'reservation' => '17754940642166'
+        ]);
+
+        $reservation = $this->reservationService->reserveProduct(1, 1, 'ART-001_BR001', 1);
+
+        $this->assertIsArray($reservation);
+        $this->assertEquals('reserved', $reservation['status']);
+        $this->assertEquals('17754940642166', $reservation['vendor_reservation_id']);
+
+        $stmt = $this->db->query("SELECT vendor_reservation_id, reserved_quantity FROM reservations JOIN products ON products.id = reservations.product_id WHERE reservations.id = " . intval($reservation['id']));
+        $savedReservation = $stmt->fetch();
+        $this->assertEquals('17754940642166', $savedReservation['vendor_reservation_id']);
+        $this->assertEquals(1, intval($savedReservation['reserved_quantity']));
+    }
     
     /**
      * Test reservation failure - vendor error
@@ -391,4 +414,3 @@ class ReservationServiceMock extends ReservationService
         return $reservations;
     }
 }
-

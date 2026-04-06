@@ -41,6 +41,7 @@ POST /admin/sync/products
 - Only reserves **vendor products** (own products skip vendor reservation)
 - Own products are held locally by moving quantity into `reserved_quantity`
 - Creates reservation records in the database
+- Persists the TRIEL reservation ID returned by the vendor so admin unreserve and order cancellation can release the same vendor hold later
 - Mixed orders move to `processing` with `partially_fulfilled` fulfillment status
 - Vendor-only orders move to `reserved`
 
@@ -169,7 +170,8 @@ CreateSalesOrder (vendor items only)
 - Cancellation behavior:
   - Vendor reservations are unreserved first
   - Own-product held stock is restored
-  - Order/item fulfillment statuses move to `cancelled`
+  - Order status moves to `cancelled`
+  - Fulfillment statuses are reset to `pending` after stock cleanup so they stay inside the production enum values
 - This applies to mixed orders as well as vendor-only and own-only orders.
 
 ## Cron Job Setup

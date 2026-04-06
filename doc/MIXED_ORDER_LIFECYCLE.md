@@ -53,6 +53,7 @@ pending → [reserved | processing] → [vendor_ordered | fulfilled | partially_
 ### Phase 2: Order Placement Success
 - **Vendor products:** Reserve via API immediately
 - **Own products:** Hold stock locally immediately
+- Persist the vendor reservation ID returned by TRIEL for later unreserve and sales-order operations
 - Update order and fulfillment status based on whether the order is vendor-only, own-only, or mixed
 
 ### Phase 3: Fulfillment
@@ -63,7 +64,8 @@ pending → [reserved | processing] → [vendor_ordered | fulfilled | partially_
 ### Phase 4: Cancellation
 - **Vendor products:** Unreserve vendor reservations
 - **Own products:** Restore held stock locally
-- Update order and order-item fulfillment statuses to `cancelled`
+- Update order status to `cancelled`
+- Reset fulfillment statuses to `pending` after stock cleanup so they remain valid for the current production schema
 
 ### Phase 5: Shipping
 - **Vendor products:** Wait for vendor shipment
