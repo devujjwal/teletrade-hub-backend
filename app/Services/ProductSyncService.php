@@ -358,7 +358,7 @@ class ProductSyncService
      * ✅ base_price - Vendor's cost price (always updated)
      * ✅ price - Customer price with markup (updated if not manually adjusted)
      * ✅ stock_quantity - Current stock from vendor (always updated)
-     * ✅ available_quantity - Vendor stock minus any locally reserved quantity
+     * ✅ available_quantity - Same as vendor stock snapshot (vendor already accounts for vendor-side reservations)
      * ✅ is_available - Calculated from stock (always updated)
      * ✅ name - Product name in all languages (always updated)
      * ✅ category_id, brand_id, warranty_id - Product categorization (always updated)
@@ -411,7 +411,7 @@ class ProductSyncService
         if ($existingProduct) {
             $existingReservedQuantity = max(0, (int) ($existingProduct['reserved_quantity'] ?? 0));
             $normalized[':reserved_quantity'] = $existingReservedQuantity;
-            $normalized[':available_quantity'] = max(0, (int) $normalized[':stock_quantity'] - $existingReservedQuantity);
+            $normalized[':available_quantity'] = max(0, (int) $normalized[':stock_quantity']);
             $normalized[':is_available'] = $normalized[':available_quantity'] > 0 ? 1 : 0;
 
             // Ensure slug exists for existing products (in case it was created before slug generation)
